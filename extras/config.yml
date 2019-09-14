@@ -1,0 +1,10 @@
+# Sample config.yml
+
+BLOCK:
+    - rule1:
+
+ALLOW:
+    - rule2:
+
+WARN:
+    - rule3:

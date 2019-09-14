@@ -1,0 +1,16 @@
+[package]
+name = "confine"
+version = "0.1.0"
+authors = ["Trail of Bits"]
+
+[dependencies]
+libc = "0.2"
+nix = "0.13.0"
+
+clap = "2.33.0"
+log = "0.4.6"
+regex = "1.2.0"
+lazy_static = "1.3.0"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
