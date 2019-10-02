@@ -1,23 +1,26 @@
-//! main.rs
+//! confine.rs
 //!
-//!     CLI entry point for ptrace wrapper and helper
-//!     functions for performing process tracing
-//!     and se/deserialization
+//!     CLI interface for confine library modules. Implements tracing under two
+//!     different modes, and provides deserialization support to serializable formats.
 
 #[cfg(all(target_os = "linux",
           any(target_arch = "x86",
               target_arch = "x86_64")),
 )]
-extern crate libc;
+
 extern crate clap;
-extern crate nix;
 extern crate regex;
+extern crate libc;
+extern crate nix;
+extern crate bcc;
+extern crate goblin;
 
 extern crate serde;
 extern crate serde_json;
 
 #[macro_use] extern crate log;
-#[macro_use] extern crate lazy_static;
+
+extern crate confine;
 
 use std::io;
 use std::process::Command;
@@ -31,15 +34,11 @@ use nix::sys::signal;
 use clap::{App, Arg};
 use log::LevelFilter;
 
-mod logger;
-use logger::TraceLogger;
+use confine::logger::TraceLogger;
+use confine::trace::ptrace::helpers;
+use confine::trace::ptrace::consts::{options, regs};
+use confine::syscall::SyscallManager;
 
-mod trace;
-use trace::ptrace::helpers;
-use trace::ptrace::consts::{options, regs};
-
-mod syscall;
-use syscall::SyscallManager;
 
 
 static LOGGER: TraceLogger = TraceLogger;
@@ -50,11 +49,11 @@ static LOGGER: TraceLogger = TraceLogger;
 enum TraceMode { Ptrace, Ebpf }
 
 
-/// `TraceProc` provides an interface for initializing and interacting with a specified PID. It implements
+/// `TraceProc` provides a builder interface for initializing and interacting with a specified PID. It implements
 /// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
 struct TraceProc {
     cmd: Command,
-    args: Vec<&'static str>,
+    args: &Vec<&'static str>,
 
     pid: pid_t,
     manager: SyscallManager,
@@ -312,7 +311,8 @@ fn main() {
                 .required(true)
         )
 
-        // TODO: policy file
+        // TODO: policy file - detection
+        // TODO: policy file - generation
 
         .arg(
             Arg::with_name("trace_mode")
@@ -378,7 +378,7 @@ fn main() {
     }
 
     // initialize TraceProc interface
-    let mut pid = TraceProc::new(cmd, args);
+    let mut pid = TraceProc::new(cmd, args.as_ref());
 
     let trace_mode: TraceMode = match matches.value_of("trace_mode") {
         Some(e) => match e {

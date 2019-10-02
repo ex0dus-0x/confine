@@ -3,9 +3,19 @@ name = "confine"
 version = "0.1.0"
 authors = ["Trail of Bits"]
 
+[lib]
+name = "confine"
+path = "src/lib.rs"
+
+[[bin]]
+name = "confine"
+path = "src/bin/main.rs"
+
 [dependencies]
 libc = "0.2"
 nix = "0.13.0"
+bcc = "0.0.12"
+goblin = "0.0.24"
 
 clap = "2.33.0"
 log = "0.4.6"
