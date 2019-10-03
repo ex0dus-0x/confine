@@ -83,6 +83,7 @@ pub mod consts {
         pub const R10:		   RegVal = 7 * 8;
         pub const R9:		   RegVal = 8 * 8;
         pub const R8:		   RegVal = 9 * 8;
+
         pub const RAX:		   RegVal = 10 * 8;
         pub const RCX:		   RegVal = 11 * 8;
         pub const RDX:		   RegVal = 12 * 8;
@@ -90,6 +91,7 @@ pub mod consts {
         pub const RDI:		   RegVal = 14 * 8;
         pub const ORIG_RAX:    RegVal = 15 * 8;
         pub const RIP: 		   u64    = 16 * 8;
+
         pub const CS: 		   RegVal = 17 * 8;
         pub const EFLAGS: 	   RegVal = 18 * 8;
         pub const RSP: 		   RegVal = 19 * 8;

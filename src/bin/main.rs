@@ -53,7 +53,7 @@ enum TraceMode { Ptrace, Ebpf }
 /// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
 struct TraceProc {
     cmd: Command,
-    args: &Vec<&'static str>,
+    args: Vec<String>,
 
     pid: pid_t,
     manager: SyscallManager,
@@ -62,6 +62,7 @@ struct TraceProc {
     trace_mode: TraceMode,
     func_log: usize
 }
+
 
 impl Default for TraceProc {
     fn default() -> Self {
@@ -84,7 +85,7 @@ impl TraceProc {
 
     /// `new()` initializes a new TraceProc interface with PID and system call manager
     /// that stores parsed system calls.
-    fn new(cmd: Command, args: Vec<&'static str>) -> Self {
+    fn new(cmd: Command, args: Vec<String>) -> Self {
         Self { cmd, args, ..Self::default() }
     }
 
@@ -108,28 +109,6 @@ impl TraceProc {
 
     fn trace(&mut self) -> io::Result<()> {
         // TODO
-        Ok(())
-    }
-
-
-    /// `run()` instantiates the loop that goes through program execution, waiting and stepping
-    /// through each syscall and properly handling errors when necessary.
-    fn run(&mut self) -> io::Result<()> {
-        info!("Looping through process syscalls.");
-        loop {
-            match self.step() {
-                Err(e) => panic!("Unable to run tracer. Reason: {:?}", e),
-                Ok(Some(status)) => {
-                    if status == 0 {
-                        break;
-                    } else {
-                        debug!("Status reported: {:?}", status);
-                    }
-                },
-                other => { other?; }
-            }
-        }
-        self.output();
         Ok(())
     }
 
@@ -242,6 +221,7 @@ impl TraceProc {
     }
 }
 
+
 #[inline]
 fn ptrace_main(mut pid: TraceProc) -> io::Result<()> {
 
@@ -266,7 +246,19 @@ fn ptrace_main(mut pid: TraceProc) -> io::Result<()> {
 
             // execute loop that examines through syscalls
             info!("Executing parent with tracing");
-            pid.run();
+            loop {
+                match pid.step() {
+                    Err(e) => panic!("Unable to run tracer. Reason: {:?}", e),
+                    Ok(Some(status)) => {
+                        if status == 0 {
+                            break;
+                        } else {
+                            debug!("Status reported: {:?}", status);
+                        }
+                    },
+                    other => { other?; }
+                }
+            }
         },
         unistd::ForkResult::Child => {
             info!("Tracing child process");
@@ -281,9 +273,9 @@ fn ptrace_main(mut pid: TraceProc) -> io::Result<()> {
 
             // execute child process with tracing until termination
             info!("Executing rest of child execution until termination");
-            let c_cmd = CString::new(pid.args[0]).expect("failed to initialize CString command");
+            let c_cmd = CString::new(pid.args[0].clone()).expect("failed to initialize CString command");
             let c_args: Vec<CString> = pid.args.iter()
-                .map(|&arg| CString::new(arg).expect("CString::new() failed"))
+                .map(|arg| CString::new(arg.as_str()).expect("CString::new() failed"))
                 .collect();
             unistd::execvp(&c_cmd, &c_args).ok().expect("failed to call execvp(2) in child process");
         }
@@ -362,14 +354,16 @@ fn main() {
     log::set_max_level(level_filter);
     info!("Initialized logger");
 
-    // collect args into vec
-    let args: Vec<&str> = matches.values_of("command")
-                      .unwrap()
-                      .collect::<Vec<&str>>();
+    // collect args into vec and convert to String for lifetime
+    let _args: Vec<&str> = matches.values_of("command")
+                          .unwrap()
+                          .collect::<Vec<&str>>();
+    let args: Vec<String> = _args.iter().map(|s| s.to_string()).collect();
+
     debug!("Command and arguments: {:?}", args);
 
     // initialize command
-    let mut cmd = Command::new(args[0]);
+    let mut cmd = Command::new(args[0].clone());
     if args.len() > 1 {
         for arg in args.iter().skip(1) {
             debug!("Adding arg: {}", arg);
@@ -378,7 +372,7 @@ fn main() {
     }
 
     // initialize TraceProc interface
-    let mut pid = TraceProc::new(cmd, args.as_ref());
+    let mut pid = TraceProc::new(cmd, args);
 
     let trace_mode: TraceMode = match matches.value_of("trace_mode") {
         Some(e) => match e {
