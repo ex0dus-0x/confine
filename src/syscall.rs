@@ -15,8 +15,12 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::Result;
 
-// path to unistd file with syscall number definitions
-static SYSCALL_TABLE: &str = "/usr/include/asm/unistd_64.h";
+// path to unistd file with syscall number definitions, based on arch
+#[cfg(target_arch = "x86_64")]
+static SYSCALL_TABLE: &str = "/usr/include/x86_64-linux-gnu/asm/unistd_64.h";
+
+#[cfg(target_arch = "x86")]
+static SYSCALL_TABLE: &str = "/usr/include/i386-linux-gnu/asm/unistd_32.h";
 
 // regex for parsing macro definitions of syscall numbers
 static SYSCALL_REGEX: &str = r"#define\s*__NR_(\w+)\s*(\d+)";

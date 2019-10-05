@@ -35,10 +35,10 @@ use clap::{App, Arg};
 use log::LevelFilter;
 
 use confine::logger::TraceLogger;
+use confine::syscall::SyscallManager;
+use confine::trace::ProcessHandler;
 use confine::trace::ptrace::helpers;
 use confine::trace::ptrace::consts::{options, regs};
-use confine::syscall::SyscallManager;
-
 
 
 static LOGGER: TraceLogger = TraceLogger;
@@ -51,12 +51,13 @@ enum TraceMode { Ptrace, Ebpf }
 
 /// `TraceProc` provides a builder interface for initializing and interacting with a specified PID. It implements
 /// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
-struct TraceProc {
+struct TraceProc<T: ProcessHandler> {
     cmd: Command,
     args: Vec<String>,
 
     pid: pid_t,
     manager: SyscallManager,
+    handler: T,
 
     json: bool,
     trace_mode: TraceMode,
@@ -67,7 +68,7 @@ struct TraceProc {
 impl Default for TraceProc {
     fn default() -> Self {
         Self {
-            cmd: Command::new("ls"),
+            cmd: Command::new(""),
             args: Vec::new(),
 
             pid: 0,
@@ -100,15 +101,18 @@ impl TraceProc {
     }
 
 
-    /// `get_proc` builds up TraceProc with initialized child process ID.
+    /// `get_proc()` builds up TraceProc with initialized child process ID.
     fn get_proc(&mut self, pid: pid_t) -> &Self {
         self.pid = pid;
         self
     }
 
-
+    /// `trace()` is called to bootstrap an actual tracer either in eBPF or ptrace mode.
     fn trace(&mut self) -> io::Result<()> {
-        // TODO
+        match self.trace_mode {
+            TraceMode::Ptrace => { ptrace_main(self); },
+            TraceMode::Ebpf => { ebpf_main(self); }
+        }
         Ok(())
     }
 
@@ -223,7 +227,7 @@ impl TraceProc {
 
 
 #[inline]
-fn ptrace_main(mut pid: TraceProc) -> io::Result<()> {
+fn ptrace_main(pid: &mut TraceProc) -> io::Result<()> {
 
     // fork child process
     info!("Forking child process from parent");
@@ -285,7 +289,8 @@ fn ptrace_main(mut pid: TraceProc) -> io::Result<()> {
 
 
 #[inline]
-fn ebpf_main(pid: TraceProc) -> io::Result<()> {
+fn ebpf_main(pid: &TraceProc) -> io::Result<()> {
+
     Ok(())
 }
 
