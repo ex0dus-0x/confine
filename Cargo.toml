@@ -15,6 +15,7 @@ path = "src/bin/main.rs"
 libc = "0.2"
 nix = "0.13.0"
 bcc = "0.0.12"
+unshare = "0.5.1"
 goblin = "0.0.24"
 
 clap = "2.33.0"

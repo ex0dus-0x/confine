@@ -22,283 +22,87 @@ extern crate serde_json;
 
 extern crate confine;
 
-use std::io;
 use std::process::Command;
-use std::ffi::CString;
-
-use libc::{pid_t, c_int};
-
-use nix::unistd;
-use nix::sys::signal;
 
 use clap::{App, Arg};
 use log::LevelFilter;
 
-use confine::logger::TraceLogger;
 use confine::syscall::SyscallManager;
-use confine::trace::ProcessHandler;
-use confine::trace::ptrace::helpers;
-use confine::trace::ptrace::consts::{options, regs};
+use confine::logger::TraceLogger;
+use confine::trace::{ProcessHandler, Ptrace, Ebpf};
 
 
 static LOGGER: TraceLogger = TraceLogger;
 
 
-/// `TraceMode` defines the two possible modes we can use in order to perform tracing: our fallback `ptrace` mode
-/// for older and arch-independent systems, and our modus operandi `ebpf` for modern and fast systems.
-enum TraceMode { Ptrace, Ebpf }
-
-
 /// `TraceProc` provides a builder interface for initializing and interacting with a specified PID. It implements
 /// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
-struct TraceProc<T: ProcessHandler> {
+struct TraceProc<'a> {
+    mode: &'a (ProcessHandler + 'a),
     cmd: Command,
-    args: Vec<String>,
+    json: bool
 
-    pid: pid_t,
-    manager: SyscallManager,
-    handler: T,
-
-    json: bool,
-    trace_mode: TraceMode,
-    func_log: usize
+    // TODO: policy stuff
+    //common_policy: Policy
+    //output_policy: Enforcer
 }
 
-
-impl Default for TraceProc {
+impl<'a> Default for TraceProc<'a> {
     fn default() -> Self {
         Self {
+            mode: &Ptrace::new(),
             cmd: Command::new(""),
-            args: Vec::new(),
-
-            pid: 0,
-            manager: SyscallManager::new(),
-
             json: false,
-            trace_mode: TraceMode::Ebpf,
-            func_log: 0
+
         }
     }
 }
 
 
-impl TraceProc {
+impl<'a> TraceProc<'a> {
 
     /// `new()` initializes a new TraceProc interface with PID and system call manager
     /// that stores parsed system calls.
-    fn new(cmd: Command, args: Vec<String>) -> Self {
-        Self { cmd, args, ..Self::default() }
+    fn new(mode: &'a ProcessHandler) -> TraceProc<'a> {
+        TraceProc { mode, ..TraceProc::default() }
     }
 
-
-    /// `with_config()` allows us to build up a TraceProc with configuration options set
-    /// by the user.
-    fn with_config(&mut self, json: bool, trace_mode: TraceMode, func_log: usize) -> &Self {
+    /// `trace_config()` builds up TraceProc with tracing configuration options.
+    /// Once configured, tracing under the various modes of operation can be done.
+    fn trace_config(&self, cmd: Command, json: bool) -> &TraceProc<'a> {
+        self.cmd = cmd;
         self.json = json;
-        self.trace_mode = trace_mode;
-        self.func_log = func_log;
         self
     }
 
+    /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
+    /// output policy enforcer format (ie seccomp, apparmor)
+    //fn policy_config(&self, policy: PathBuf, enforcer: Enforcer)
 
-    /// `get_proc()` builds up TraceProc with initialized child process ID.
-    fn get_proc(&mut self, pid: pid_t) -> &Self {
-        self.pid = pid;
-        self
+
+    /// `run_trace()` takes an initialized TraceProc with mode and executes a normal trace with
+    /// the respective interface specified. Once complete and returns a generated trace manager, we
+    /// output appropriately.
+    fn run_trace(&self) -> () {
+        let out_manager: SyscallManager = self.mode.trace().unwrap();
     }
 
-    /// `trace()` is called to bootstrap an actual tracer either in eBPF or ptrace mode.
-    fn trace(&mut self) -> io::Result<()> {
-        match self.trace_mode {
-            TraceMode::Ptrace => { ptrace_main(self); },
-            TraceMode::Ebpf => { ebpf_main(self); }
-        }
-        Ok(())
+    /// `run_trace_policy()` does a normal `run_trace()`, but instead also enforces the set common
+    /// security policy on top of the running tracee, with the purpose of enabling policy testing while
+    /// in a trusted and secure environment.
+    fn run_trace_policy(&self) -> () {
+        let out_manager: SyscallManager = self.mode.trace();
     }
 
-
-    /// `output()` is called after a run in order return trace results the configured format,
-    /// either as raw unstructured trace or in JSON
-    fn output(&mut self) -> () {
-
-        // JSON
-        if self.json {
-            println!("{}", self.manager.to_json().expect("unable to output to JSON"));
-        }
-
-        // Default raw output
-        else {
-            println!("{}", self.manager);
-        }
-    }
-
-
-    /// `step()` defines the main instrospection performed ontop of the traced process, using
-    /// ptrace to parse out syscall registers for output.
-    fn step(&mut self) -> io::Result<Option<c_int>> {
-
-        info!("ptrace-ing with PTRACE_SYSCALL to SYS_ENTER");
-        helpers::syscall(self.pid)?;
-        if let Some(status) = self.wait().unwrap() {
-            return Ok(Some(status));
-        }
-
-        // determine syscall number and initialize
-        let syscall_num = match self.get_syscall_num() {
-            Ok(num) => num,
-            Err(e) => panic!("Cannot retrieve syscall number. Reason {:?}", e),
-        };
-        debug!("Syscall number: {:?}", syscall_num);
-
-        // retrieve first 3 arguments from syscall
-        let mut args: Vec<u64> = Vec::new();
-        for i in 0..2 {
-            args.push(self.get_arg(i).unwrap());
-        }
-
-        // add syscall to manager
-        self.manager.add_syscall(syscall_num, args);
-
-        info!("ptrace-ing with PTRACE_SYSCALL to SYS_EXIT");
-        helpers::syscall(self.pid)?;
-        if let Some(status) = self.wait().unwrap() {
-            return Ok(Some(status));
-        }
-        Ok(None)
-    }
-
-
-    /// `wait()` wrapper to waitpid/wait4, with error-checking in order
-    /// to return proper type back to developer.
-    fn wait(&self) -> io::Result<Option<c_int>> {
-        let mut status = 0;
-        unsafe {
-            libc::waitpid(self.pid, &mut status, 0);
-
-            // error-check status set
-            if libc::WIFEXITED(status) {
-                Ok(Some(libc::WEXITSTATUS(status)))
-            } else {
-                Ok(None)
-            }
-        }
-    }
-
-
-    /// `get_arg()` is called to introspect current process
-    /// states register values in order to determine syscall
-    /// and arguments passed.
-    fn get_arg(&mut self, reg: u8) -> io::Result<u64> {
-
-        #[cfg(target_arch = "x86_64")]
-        let offset = match reg {
-            0 => regs::RDI,
-            1 => regs::RSI,
-            2 => regs::RDX,
-            3 => regs::RCX,
-            4 => regs::R8,
-            5 => regs::R9,
-            _ => panic!("Unmatched argument offset")
-        };
-
-        /* TODO: implement registers
-        #[cfg(target_arch = "x86")]
-        let offset = match reg {
-            0 => regs::EDI,
-            1 => regs::ESI,
-            2 => regs::EDX,
-            3 => regs::ECX,
-            4 => regs::E8,
-            5 => regs::E9,
-            _ => panic!("Unmatched argument offset")
-        };
-        */
-
-        helpers::peek_user(self.pid, offset).map(|x| x as u64)
-    }
-
-
-    /// `get_syscall_num()` uses ptrace with PEEK_USER to return the
-    /// syscall num from ORIG_RAX.
-    fn get_syscall_num(&mut self) -> io::Result<u64> {
-        helpers::peek_user(self.pid, regs::ORIG_RAX).map(|x| x as u64)
-    }
-}
-
-
-#[inline]
-fn ptrace_main(pid: &mut TraceProc) -> io::Result<()> {
-
-    // fork child process
-    info!("Forking child process from parent");
-    let result = unistd::fork().expect("unable to call fork(2)");
-    match result {
-        unistd::ForkResult::Parent { child } => {
-
-            info!("Tracing parent process");
-            pid.get_proc(child.as_raw());
-
-            // in parent, wait for process event from child
-            info!("Waiting for child process to send SIGSTOP");
-            if let Err(e) = pid.wait() {
-                panic!("Error: {:?}", e);
-            }
-
-            // set trace options
-            info!("Setting trace options with PTRACE_SETOPTIONS");
-            helpers::set_options(child.as_raw(), options::PTRACE_O_TRACESYSGOOD.into());
-
-            // execute loop that examines through syscalls
-            info!("Executing parent with tracing");
-            loop {
-                match pid.step() {
-                    Err(e) => panic!("Unable to run tracer. Reason: {:?}", e),
-                    Ok(Some(status)) => {
-                        if status == 0 {
-                            break;
-                        } else {
-                            debug!("Status reported: {:?}", status);
-                        }
-                    },
-                    other => { other?; }
-                }
-            }
-        },
-        unistd::ForkResult::Child => {
-            info!("Tracing child process");
-
-            // start tracing process, notifying parent through wait(2)
-            info!("Child process executing PTRACE_TRACEME");
-            helpers::traceme();
-
-            // send a SIGSTOP in order to stop child process for parent introspection
-            info!("Sending SIGTRAP, going back to parent process");
-            signal::kill(unistd::getpid(), signal::Signal::SIGSTOP);
-
-            // execute child process with tracing until termination
-            info!("Executing rest of child execution until termination");
-            let c_cmd = CString::new(pid.args[0].clone()).expect("failed to initialize CString command");
-            let c_args: Vec<CString> = pid.args.iter()
-                .map(|arg| CString::new(arg.as_str()).expect("CString::new() failed"))
-                .collect();
-            unistd::execvp(&c_cmd, &c_args).ok().expect("failed to call execvp(2) in child process");
-        }
-    }
-    Ok(())
-}
-
-
-#[inline]
-fn ebpf_main(pid: &TraceProc) -> io::Result<()> {
-
-    Ok(())
+    /// `generate_policy()` takes a parsed confine policy and generates a enforcer policy from the specific
+    /// enforcer module.
 }
 
 
 #[allow(unused_must_use)]
 fn main() {
     let matches = App::new("confine")
-        .about("security-focused process tracer with capabilities")
+        .about("security-focused process tracer with policy handling capabilities")
         .author("Trail of Bits")
         .arg(
             Arg::with_name("command")
@@ -376,16 +180,13 @@ fn main() {
         }
     }
 
-    // initialize TraceProc interface
-    let mut pid = TraceProc::new(cmd, args);
-
-    let trace_mode: TraceMode = match matches.value_of("trace_mode") {
+    let trace_mode = match matches.value_of("trace_mode") {
         Some(e) => match e {
-            "ebpf"      => TraceMode::Ebpf,
-            "ptrace"    => TraceMode::Ptrace,
-            _           => panic!("Unknown trace mode specified.")
+            "ebpf"      => Ebpf::new(),
+            "ptrace"    => Ptrace::new(),
+            _           => { panic!("Unknown trace mode specified.") }
         },
-        None => TraceMode::Ebpf
+        None => Ebpf::new(),
     };
 
     let func_log: usize = match matches.value_of("func_log") {
@@ -393,13 +194,7 @@ fn main() {
         None    => 0 as usize,
     };
 
-    // initialize configuration with options
-    pid.with_config(
-        matches.is_present("json"),
-        trace_mode,
-        func_log
-    );
-
-    // trace based on configuration
-    pid.trace();
+    // initialize TraceProc interface
+    let mut proc = TraceProc::new(&trace_mode)
+        .trace_config(cmd, matches.is_present("json"));
 }

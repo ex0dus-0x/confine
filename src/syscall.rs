@@ -31,7 +31,7 @@ type SyscallTable = HashMap<u64, String>;
 
 /// Defines an arbitrary syscall, with support for de/serialization
 /// with serde_json.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Syscall {
     number: u64,
     name: String,
@@ -41,7 +41,7 @@ pub struct Syscall {
 
 /// SyscallManager stores a vector of Syscalls and manages a HashMap
 /// that stores syscall num and name mappings.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename = "syscalls")]
 pub struct SyscallManager {
     syscalls: Vec<Syscall>,

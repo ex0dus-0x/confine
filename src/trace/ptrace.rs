@@ -70,8 +70,8 @@ pub mod consts {
 
 	pub mod regs {
 
-		/// i64 represents value register value
-		type RegVal = i64;
+	/// i64 represents value register value
+	type RegVal = i64;
 
         pub const R15:		   RegVal = 0 * 8;
         pub const R14:		   RegVal = 1 * 8;
@@ -101,7 +101,7 @@ pub mod consts {
         pub const DS:		   RegVal = 23 * 8;
         pub const ES:		   RegVal = 24 * 8;
         pub const FS:		   RegVal = 25 * 8;
-		pub const GS:		   RegVal = 26 * 8;
+	pub const GS:		   RegVal = 26 * 8;
     }
 }
 
