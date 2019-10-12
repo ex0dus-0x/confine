@@ -2,11 +2,13 @@
 //!
 //!     Defines modes of operation for syscall and library tracing.
 //!     Provides several interfaces and wrappers to the `trace` submodule
-//! in order to allow convenient tracing.
+//!     in order to allow convenient tracing.
 
+use libc::{pid_t, c_int};
 use nix::unistd;
 use nix::sys::signal;
-use libc::{pid_t, c_int};
+
+use failure::Error;
 
 use std::io;
 use std::ffi::CString;
@@ -18,11 +20,20 @@ use self::ptrace::helpers;
 use self::ptrace::consts::{options, regs};
 
 
+#[derive(Debug, Fail)]
+pub enum TraceError {
+
+    #[fail(display = "Cannot execute trace for {} mode. Reason: {}", mode, reason)]
+    ExecError { mode: String, reason: String }
+
+}
+
+
 /// trait that handles support for extending tracing support
 /// for various modes. Wraps around our tracing mode of operations.
 pub trait ProcessHandler {
     fn new() -> Self where Self: Sized;
-    fn trace(&mut self, args: Vec<String>) -> io::Result<SyscallManager>;
+    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError>;
 }
 
 
@@ -41,7 +52,7 @@ impl ProcessHandler for Ebpf {
         }
     }
 
-    fn trace(&mut self, args: Vec<String>) -> io::Result<SyscallManager> {
+    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
         Ok(self.manager.clone())
     }
 }
@@ -67,7 +78,7 @@ impl ProcessHandler for Ptrace {
 
     /// `trace()` functionality for ptrace mode. Forks a child process, and uses parent to
     /// to step through syscall events.
-    fn trace(&mut self, args: Vec<String>) -> io::Result<SyscallManager> {
+    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
         info!("Forking child process from parent");
         let result = unistd::fork().expect("unable to call fork(2)");
         match result {
@@ -79,7 +90,7 @@ impl ProcessHandler for Ptrace {
                 // in parent, wait for process event from child
                 info!("Waiting for child process to send SIGSTOP");
                 if let Err(e) = self.wait() {
-                    panic!("Error: {:?}", e);
+                    return Err(TraceError::ExecError);
                 }
 
                 // set trace options
@@ -90,7 +101,6 @@ impl ProcessHandler for Ptrace {
                 info!("Executing parent with tracing");
                 loop {
                     match self.step() {
-                        Err(e) => panic!("Unable to run tracer. Reason: {:?}", e),
                         Ok(Some(status)) => {
                             if status == 0 {
                                 break;
@@ -98,7 +108,12 @@ impl ProcessHandler for Ptrace {
                                 debug!("Status reported: {:?}", status);
                             }
                         },
-                        other => { other?; }
+                        Ok(None) => {
+                            return Err(TraceError::ExecError);
+                        },
+                        Err(e) => {
+                            return Err(TraceError::ExecError);
+                        }
                     }
                 }
             },
@@ -130,7 +145,7 @@ impl Ptrace {
 
     /// `step()` defines the main instrospection performed ontop of the traced process, using
     /// ptrace to parse out syscall registers for output.
-    fn step(&mut self) -> io::Result<Option<c_int>> {
+    fn step(&mut self) -> Result<Option<c_int>, Error> {
 
         info!("ptrace-ing with PTRACE_SYSCALL to SYS_ENTER");
         helpers::syscall(self.pid)?;

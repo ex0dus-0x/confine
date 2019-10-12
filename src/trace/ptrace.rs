@@ -200,9 +200,9 @@ pub mod helpers {
     }
 
 
-	/// `peek_user()` call with error-checking. PTRACE_PEEKUSER is used in order to
-	/// introspect register values when encountering SYSCALL_ENTER or SYSCALL_EXIT.
-	pub fn peek_user(pid: InferiorType, register: i64) -> Result<i64, Error> {
+    /// `peek_user()` call with error-checking. PTRACE_PEEKUSER is used in order to
+    /// introspect register values when encountering SYSCALL_ENTER or SYSCALL_EXIT.
+    pub fn peek_user(pid: InferiorType, register: i64) -> Result<i64, Error> {
         match ptrace::exec_ptrace(consts::requests::PTRACE_PEEKUSER, pid, register as *mut libc::c_void, NULL){
             Err(e) => {
                 let err = Error::new(ErrorKind::Other, e.desc());
@@ -210,7 +210,7 @@ pub mod helpers {
             },
             Ok(res) => Ok(res)
         }
-	}
+    }
 
 
     /// `get_regs()` call with error-checking. PTRACE_GETREGS is used in order to

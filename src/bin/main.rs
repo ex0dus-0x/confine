@@ -9,19 +9,12 @@
 )]
 
 extern crate clap;
-extern crate regex;
-extern crate libc;
-extern crate nix;
-extern crate bcc;
-extern crate goblin;
-
-extern crate serde;
-extern crate serde_json;
+extern crate confine;
 
 #[macro_use] extern crate log;
 
-extern crate confine;
-
+use std::boxed::Box;
+use std::path::PathBuf;
 use std::process::Command;
 
 use clap::{App, Arg};
@@ -67,9 +60,20 @@ impl<'a> TraceProc<'a> {
         TraceProc { mode, ..TraceProc::default() }
     }
 
+    /// `get_handler()` is a factory-like helper method that returns an instance of a trait object in a Box
+    /// after parsing an argument string.
+    #[inline]
+    fn get_handler(handler_str: &str) -> Box<ProcessHandler + 'static> {
+        match handler_str {
+            "ptrace" => Box::new(Ptrace::new()),
+            "ebpf" => Box::new(Ebpf::new()),
+            _ => unreachable!()
+        }
+    }
+
     /// `trace_config()` builds up TraceProc with tracing configuration options.
     /// Once configured, tracing under the various modes of operation can be done.
-    fn trace_config(&self, cmd: Command, json: bool) -> &TraceProc<'a> {
+    fn trace_config(&mut self, cmd: Command, json: bool) -> &TraceProc<'a> {
         self.cmd = cmd;
         self.json = json;
         self
@@ -77,25 +81,29 @@ impl<'a> TraceProc<'a> {
 
     /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
     /// output policy enforcer format (ie seccomp, apparmor)
-    //fn policy_config(&self, policy: PathBuf, enforcer: Enforcer)
-
+    fn policy_config(&self, policy: PathBuf, /*enforcer: Enforcer*/) -> &TraceProc<'a> {
+        self
+    }
 
     /// `run_trace()` takes an initialized TraceProc with mode and executes a normal trace with
     /// the respective interface specified. Once complete and returns a generated trace manager, we
     /// output appropriately.
     fn run_trace(&self) -> () {
-        let out_manager: SyscallManager = self.mode.trace().unwrap();
+        //let out_manager: SyscallManager = self.mode.trace().unwrap();
     }
 
     /// `run_trace_policy()` does a normal `run_trace()`, but instead also enforces the set common
     /// security policy on top of the running tracee, with the purpose of enabling policy testing while
     /// in a trusted and secure environment.
     fn run_trace_policy(&self) -> () {
-        let out_manager: SyscallManager = self.mode.trace();
+        //let out_manager: SyscallManager = self.mode.trace().unwrap();
     }
 
     /// `generate_policy()` takes a parsed confine policy and generates a enforcer policy from the specific
     /// enforcer module.
+    fn generate_policy(&self, output: PathBuf) -> () {
+        ()
+    }
 }
 
 
@@ -133,16 +141,7 @@ fn main() {
                 .takes_value(false)
                 .required(false)
         )
-        .arg(
-            Arg::with_name("func_log")
-                .short("f")
-                .long("func_log")
-                .help("Level of trace function output (default is 0, syscall only).")
-                .takes_value(true)
-                .value_name("FUNC_LOG_LEVEL")
-                .required(false)
-        )
-        .arg(
+       .arg(
             Arg::with_name("verbosity")
                 .short("v")
                 .long("verbosity")
@@ -180,21 +179,15 @@ fn main() {
         }
     }
 
-    let trace_mode = match matches.value_of("trace_mode") {
-        Some(e) => match e {
-            "ebpf"      => Ebpf::new(),
-            "ptrace"    => Ptrace::new(),
-            _           => { panic!("Unknown trace mode specified.") }
-        },
-        None => Ebpf::new(),
-    };
+    // determine trace mode of operation
+    let mode = matches.value_of("trace_mode").unwrap();
 
-    let func_log: usize = match matches.value_of("func_log") {
-        Some(e) => e.parse::<usize>().unwrap(),
-        None    => 0 as usize,
-    };
+    info!("Utilizing trace mode: {}", mode);
+    let _trace_mode = TraceProc::get_handler(mode);
+    let trace_mode = Box::into_raw(_trace_mode);
 
     // initialize TraceProc interface
+    info!("Starting up TraceProc instantiation");
     let mut proc = TraceProc::new(&trace_mode)
         .trace_config(cmd, matches.is_present("json"));
 }
