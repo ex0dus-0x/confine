@@ -57,18 +57,18 @@ pub mod consts {
         /// parameter when calling ptrace with PTRACE_SETOPTIONS
         type PtraceOption = c_int;
 
-		pub const PTRACE_O_TRACESYSGOOD:   PtraceOption = 0x01;
+	pub const PTRACE_O_TRACESYSGOOD:   PtraceOption = 0x01;
         pub const PTRACE_O_TRACEFORK:	   PtraceOption = 0x02;
         pub const PTRACE_O_TRACEVFORK:	   PtraceOption = 0x03;
         pub const PTRACE_O_TRACECLONE:	   PtraceOption = 0x04;
         pub const PTRACE_O_TRACEEXEC:	   PtraceOption = 0x05;
         pub const PTRACE_O_TRACEVFORKDONE: PtraceOption = 0x06;
         pub const PTRACE_O_TRACEEXIT: 	   PtraceOption = 0x07;
-		pub const PTRACE_O_TRACESECCOMP:   PtraceOption = 0x08;
+	pub const PTRACE_O_TRACESECCOMP:   PtraceOption = 0x08;
     }
 
 
-	pub mod regs {
+    pub mod regs {
 
 	/// i64 represents value register value
 	type RegVal = i64;
@@ -109,6 +109,7 @@ pub mod consts {
 mod ptrace {
     use libc::{c_int, c_long, c_void, pid_t};
     use nix::errno::Errno;
+
 
     /// defines an `unsafe` foreign function interface to the `ptrace(2)` system call.
     /// `ptrace(2)`'s original C function definition is as follows:

@@ -12,6 +12,7 @@ use failure::Error;
 
 use std::io;
 use std::ffi::CString;
+use std::process::Command;
 
 use crate::syscall::SyscallManager;
 
@@ -33,7 +34,7 @@ pub enum TraceError {
 /// for various modes. Wraps around our tracing mode of operations.
 pub trait ProcessHandler {
     fn new() -> Self where Self: Sized;
-    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError>;
+    fn trace(&mut self, cmd: Command, args: Vec<String>) -> Result<SyscallManager, Error>;
 }
 
 
@@ -52,7 +53,7 @@ impl ProcessHandler for Ebpf {
         }
     }
 
-    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
+    fn trace(&mut self, cmd: Command, args: Vec<String>) -> Result<SyscallManager, Error> {
         Ok(self.manager.clone())
     }
 }
@@ -78,7 +79,7 @@ impl ProcessHandler for Ptrace {
 
     /// `trace()` functionality for ptrace mode. Forks a child process, and uses parent to
     /// to step through syscall events.
-    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
+    fn trace(&mut self, cmd: Command, args: Vec<String>) -> Result<SyscallManager, Error> {
         info!("Forking child process from parent");
         let result = unistd::fork().expect("unable to call fork(2)");
         match result {
@@ -89,9 +90,7 @@ impl ProcessHandler for Ptrace {
 
                 // in parent, wait for process event from child
                 info!("Waiting for child process to send SIGSTOP");
-                if let Err(e) = self.wait() {
-                    return Err(TraceError::ExecError);
-                }
+                self.wait()?;
 
                 // set trace options
                 info!("Setting trace options with PTRACE_SETOPTIONS");
@@ -108,12 +107,8 @@ impl ProcessHandler for Ptrace {
                                 debug!("Status reported: {:?}", status);
                             }
                         },
-                        Ok(None) => {
-                            return Err(TraceError::ExecError);
-                        },
-                        Err(e) => {
-                            return Err(TraceError::ExecError);
-                        }
+                        Ok(None) => {},
+                        Err(e) => { return Err(e); },
                     }
                 }
             },
@@ -149,7 +144,7 @@ impl Ptrace {
 
         info!("ptrace-ing with PTRACE_SYSCALL to SYS_ENTER");
         helpers::syscall(self.pid)?;
-        if let Some(status) = self.wait().unwrap() {
+        if let Some(status) = self.wait()? {
             return Ok(Some(status));
         }
 
@@ -163,7 +158,7 @@ impl Ptrace {
         // retrieve first 3 arguments from syscall
         let mut args: Vec<u64> = Vec::new();
         for i in 0..2 {
-            args.push(self.get_arg(i).unwrap());
+            args.push(self.get_arg(i)?);
         }
 
         // add syscall to manager
@@ -171,7 +166,7 @@ impl Ptrace {
 
         info!("ptrace-ing with PTRACE_SYSCALL to SYS_EXIT");
         helpers::syscall(self.pid)?;
-        if let Some(status) = self.wait().unwrap() {
+        if let Some(status) = self.wait()? {
             return Ok(Some(status));
         }
         Ok(None)
