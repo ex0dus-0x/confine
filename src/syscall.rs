@@ -123,17 +123,17 @@ impl SyscallManager {
     }
 
 
+    /// helper that returns our system calls in a prettified JSON format
     pub fn to_json(&mut self) -> Result<String> {
-        serde_json::to_string(&self)
+        serde_json::to_string_pretty(&self)
     }
 }
 
 
 impl fmt::Display for SyscallManager {
 
+    /// collect system calls and output in readable format
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-
-        // collect syscalls into formattable string
         let syscalls: Vec<String> = self.syscalls
             .iter()
             .map(|x| format!("{}({:?})", x.name, x.args))
