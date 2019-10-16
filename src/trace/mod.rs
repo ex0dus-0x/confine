@@ -10,9 +10,11 @@ use nix::sys::signal;
 
 use failure::Error;
 
+use unshare::Command;
+use unshare::Namespace;
+
 use std::io;
 use std::ffi::CString;
-use std::process::Command;
 
 use crate::syscall::SyscallManager;
 
@@ -34,7 +36,7 @@ pub enum TraceError {
 /// for various modes. Wraps around our tracing mode of operations.
 pub trait ProcessHandler {
     fn new() -> Self where Self: Sized;
-    fn trace(&mut self, cmd: Command, args: Vec<String>) -> Result<SyscallManager, Error>;
+    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, Error>;
 }
 
 
@@ -53,7 +55,7 @@ impl ProcessHandler for Ebpf {
         }
     }
 
-    fn trace(&mut self, cmd: Command, args: Vec<String>) -> Result<SyscallManager, Error> {
+    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, Error> {
         Ok(self.manager.clone())
     }
 }
@@ -69,7 +71,6 @@ pub struct Ptrace {
 
 impl ProcessHandler for Ptrace {
 
-    /// `new()` simply initializes a trace handler with a syscall manager for r/w
     fn new() -> Self {
         Self {
             pid: 0,
@@ -79,7 +80,50 @@ impl ProcessHandler for Ptrace {
 
     /// `trace()` functionality for ptrace mode. Forks a child process, and uses parent to
     /// to step through syscall events.
-    fn trace(&mut self, cmd: Command, args: Vec<String>) -> Result<SyscallManager, Error> {
+    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, Error> {
+
+        let mut cmd = Command::new(&args[0]);
+        for arg in args.iter().next() {
+            cmd.arg(arg);
+        }
+
+        // initialize with unshared namespaces for container-like environment
+        let namespaces = vec![Namespace::User, Namespace::Cgroup];
+        cmd.unshare(&namespaces);
+
+        // call traceme helper to signal parent for tracing
+        cmd.before_exec(helpers::traceme);
+
+        // spawns a child process handler
+        info!("Initializing child process and calling PTRACE_TRACEME");
+        let mut child = cmd.spawn().expect("could not spawn");
+
+        // retrieve spawned child process ID and store for tracer routines
+        self.pid = child.pid();
+        debug!("Child PID: {}", self.pid);
+
+        info!("Setting trace options with PTRACE_SETOPTIONS");
+        helpers::set_options(self.pid, options::PTRACE_O_TRACESYSGOOD.into());
+
+        // execute loop that examines through syscalls
+        info!("Executing parent with tracing");
+        loop {
+            match self.step() {
+                Ok(Some(status)) => {
+                    if status == 0 {
+                        break;
+                    } else {
+                        debug!("Status reported: {:?}", status);
+                    }
+                },
+                Ok(None) => {},
+                Err(e) => { return Err(e); },
+            }
+        }
+
+        Ok(self.manager.clone())
+
+        /*
         info!("Forking child process from parent");
         let result = unistd::fork().expect("unable to call fork(2)");
         match result {
@@ -133,6 +177,7 @@ impl ProcessHandler for Ptrace {
             }
         }
         Ok(self.manager.clone())
+        */
     }
 }
 

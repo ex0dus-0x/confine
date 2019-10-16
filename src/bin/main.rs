@@ -16,7 +16,6 @@ extern crate confine;
 
 use std::boxed::Box;
 use std::path::PathBuf;
-use std::process::Command;
 
 use clap::{App, Arg};
 use log::LevelFilter;
@@ -24,6 +23,8 @@ use failure::Error;
 
 use confine::syscall::SyscallManager;
 use confine::logger::TraceLogger;
+use confine::policy::Policy;
+use confine::enforcers::Enforcer;
 use confine::trace::{ProcessHandler, Ptrace, Ebpf};
 
 
@@ -35,11 +36,9 @@ static LOGGER: TraceLogger = TraceLogger;
 struct TraceProc {
     mode: Box<ProcessHandler>,
     manager: Option<SyscallManager>,
-    json: bool
-
-    // TODO: policy stuff
-    //common_policy: Policy
-    //output_policy: Enforcer
+    json: bool,
+    common_policy: Option<Policy>,
+    //enforcer: Option<Enforcer>
 }
 
 impl Default for TraceProc {
@@ -47,9 +46,9 @@ impl Default for TraceProc {
         Self {
             mode: Box::new(Ptrace::new()),
             manager: None,
-            //cmd: None,
-            //args: Vec::new(),
             json: false,
+            common_policy: None, // TODO: default policy
+            //enforcer: None
         }
     }
 }
@@ -90,8 +89,8 @@ impl TraceProc {
 
     /// `run_trace()` takes an initialized TraceProc with mode and execute a normal trace, and store to struct.
     /// Once traced, we can preemptively output the trace as well, in the case the user only wants a trace.
-    fn run_trace(&mut self, cmd: Command, args: Vec<String>, output: bool) -> Result<(), Error> {
-        if let Ok(table) = self.mode.trace(cmd, args) {
+    fn run_trace(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
+        if let Ok(table) = self.mode.trace(args) {
             //self.manager = Some(table);
             if output {
                 println!("{}", table);
@@ -194,15 +193,6 @@ fn main() {
 
     debug!("Command and arguments: {:?}", args);
 
-    // initialize command
-    let mut cmd = Command::new(args[0].clone());
-    if args.len() > 1 {
-        for arg in args.iter().skip(1) {
-            debug!("Adding arg: {}", arg);
-            cmd.arg(arg);
-        }
-    }
-
     // determine trace mode of operation
     let mode = matches.value_of("trace_mode").unwrap();
     info!("Utilizing trace mode: {}", mode);
@@ -218,5 +208,5 @@ fn main() {
         .policy_config(policy_path);
 
     // run trace depending on arguments specified
-    proc.run_trace(cmd, args, true);
+    proc.run_trace(args, true);
 }
