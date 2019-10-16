@@ -5,13 +5,16 @@
 //!
 //!      - syscall and userspace func tracing with two modes of functionality
 //!      - deserialization support for traces to serializable formats
+//!      - policy parsing and generation
 //!      - enforcer API for policy generation and enforcement
 
 extern crate regex;
+extern crate toml;
+
 extern crate libc;
 extern crate nix;
 extern crate bcc;
-extern crate goblin;
+extern crate unshare;
 
 extern crate serde;
 extern crate serde_json;
@@ -20,6 +23,20 @@ extern crate serde_json;
 #[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
 
-pub mod trace;
-pub mod syscall;
+
+/// logger used in both CLI and library modules for verbose debugging support.
 pub mod logger;
+
+/// defines interface to system call table generation and de/serialization.
+pub mod syscall;
+
+/// defines the `trace` submodule that includes support for interfacing tracing with
+/// either ptrace or eBPF instrumentation, with high-level interfacing and trait bound defined in mod.rs
+pub mod trace;
+
+/// defines our common policy format, and its parser and enforcer generation procedures.
+pub mod policy;
+
+/// contains submodules for interfaces of security enforcers, with common trait bound defined in mod.rs
+pub mod enforcers;
+

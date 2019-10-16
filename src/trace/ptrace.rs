@@ -141,7 +141,7 @@ mod ptrace {
                 };
 
                 // error-check and ensure that errno is actually not a false positive
-                if ret == -1 && Errno::last() != Errno::UnknownErrno {
+                if (ret == -1) && (Errno::last() != Errno::UnknownErrno) {
                     return Err(Errno::last());
                 }
                 return Ok(ret);

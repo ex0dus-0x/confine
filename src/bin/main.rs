@@ -38,7 +38,7 @@ struct TraceProc {
     manager: Option<SyscallManager>,
     json: bool,
     common_policy: Option<Policy>,
-    //enforcer: Option<Enforcer>
+    //enforcer: Option<Box<Enforcer>>
 }
 
 impl Default for TraceProc {
@@ -47,7 +47,7 @@ impl Default for TraceProc {
             mode: Box::new(Ptrace::new()),
             manager: None,
             json: false,
-            common_policy: None, // TODO: default policy
+            common_policy: None,
             //enforcer: None
         }
     }
@@ -90,10 +90,12 @@ impl TraceProc {
     /// `run_trace()` takes an initialized TraceProc with mode and execute a normal trace, and store to struct.
     /// Once traced, we can preemptively output the trace as well, in the case the user only wants a trace.
     fn run_trace(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
-        if let Ok(table) = self.mode.trace(args) {
-            //self.manager = Some(table);
-            if output {
-                println!("{}", table);
+        self.manager = Some(self.mode.trace(args)?);
+        if output {
+            if !self.json {
+                println!("{}", self.manager.unwrap())
+            } else {
+                println!("{}", self.manager.unwrap().to_json()?);
             }
         }
         Ok(())
@@ -102,12 +104,13 @@ impl TraceProc {
     /// `run_trace_policy()` does a normal `run_trace()`, but instead also enforces the set common
     /// security policy on top of the running tracee, with the purpose of enabling policy testing while
     /// in a trusted and secure environment.
-    fn run_trace_policy(&self) -> () {
-        //let out_manager: SyscallManager = self.mode.trace().unwrap();
+    fn run_trace_policy(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
+        self.run_trace(args, output)?;
+        Ok(())
     }
 
     /// `generate_policy()` takes a parsed confine policy and generates a enforcer policy from the specific
-    /// enforcer module.
+    /// enforcer module, and returns a path for consumption.
     fn generate_policy(&self, output: PathBuf) -> () {
         ()
     }
@@ -150,7 +153,7 @@ fn main() {
                 .short("m")
                 .long("trace_mode")
                 .possible_values(&["ebpf", "ptrace"])
-                .default_value("ebpf")
+                .default_value("ptrace")
                 .takes_value(true)
                 .value_name("TRACE_MODE")
                 .required(false)
@@ -199,7 +202,8 @@ fn main() {
     let trace_mode = TraceProc::get_handler(mode);
 
     // parse out policy generation options
-    let policy_path = matches.value_of("policy_path").map(|p| PathBuf::from(p));
+    let policy_path = matches.value_of("policy_path")
+        .map(|p| PathBuf::from(p));
 
     // initialize TraceProc interface
     info!("Starting up TraceProc instantiation");
@@ -208,5 +212,7 @@ fn main() {
         .policy_config(policy_path);
 
     // run trace depending on arguments specified
-    proc.run_trace(args, true);
+    if let Err(e) = proc.run_trace(args, true) {
+        panic!("{}", e);
+    }
 }
