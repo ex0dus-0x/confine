@@ -11,9 +11,10 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::collections::HashMap;
 
+use failure::Error;
 use regex::Regex;
 use serde::Serialize;
-use serde_json::Result;
+
 
 // path to unistd file with syscall number definitions, based on arch
 #[cfg(target_arch = "x86_64")]
@@ -30,7 +31,7 @@ type SyscallTable = HashMap<u64, String>;
 
 
 /// Defines an arbitrary syscall, with support for de/serialization
-/// with serde_json.
+/// with serde_json. TODO(alan): define group, and whether we should run or not.
 #[derive(Serialize, Clone)]
 pub struct Syscall {
     number: u64,
@@ -50,23 +51,21 @@ pub struct SyscallManager {
     pub _syscall_table: SyscallTable
 }
 
+// TODO
+//#[derive(Debug, Fail)]
+//struct SysManagerError();
 
-impl Default for SyscallManager {
-    fn default() -> Self {
-        let syscall_table = SyscallManager::_parse_syscall_table()
-            .expect("cannot parse syscall table.");
 
+impl SyscallManager {
+
+    /// `new()` initializes a manager with a parsed system call table,
+    /// ready for storing syscalls.
+    pub fn new() -> Self {
+        let syscall_table = SyscallManager::_parse_syscall_table().unwrap();
         Self {
             syscalls: Vec::new(),
             _syscall_table: syscall_table
         }
-    }
-}
-
-impl SyscallManager {
-
-    pub fn new() -> Self {
-        Self::default()
     }
 
     /// `_parse_syscall_table()` is a helper method that parses a "syscall table"
@@ -124,7 +123,7 @@ impl SyscallManager {
 
 
     /// helper that returns our system calls in a prettified JSON format
-    pub fn to_json(&mut self) -> Result<String> {
+    pub fn to_json(&mut self) -> serde_json::Result<String> {
         serde_json::to_string_pretty(&self)
     }
 }

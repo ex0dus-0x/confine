@@ -26,7 +26,7 @@ pub enum TraceError {
     StepError { pid: pid_t, reason: String },
 
     #[fail(display = "PTRACE_{} failed with error `{}`", call, reason)]
-    PtraceError { call: &'static str, reason: String }
+    PtraceError { call: &'static str, reason: std::io::Error }
 }
 
 
@@ -102,8 +102,9 @@ impl ProcessHandler for Ptrace {
         info!("Setting trace options with PTRACE_SETOPTIONS");
         helpers::set_options(self.pid, options::PTRACE_O_TRACESYSGOOD.into())
             .map_err(|e| TraceError::PtraceError {
-                call: "SETOPTIONS", reason: e.to_string()
+                call: "SETOPTIONS", reason: e
             })?;
+
 
         // execute loop that examines through syscalls
         info!("Executing parent with tracing");
@@ -135,7 +136,7 @@ impl Ptrace {
         info!("ptrace-ing with PTRACE_SYSCALL to SYS_ENTER");
         helpers::syscall(self.pid)
             .map_err(|e| TraceError::PtraceError {
-                call: "SYSCALL", reason: e.to_string()
+                call: "SYSCALL", reason: e
             })?;
 
         if let Some(status) = self.wait() {
@@ -148,8 +149,10 @@ impl Ptrace {
 
         // retrieve first 3 arguments from syscall
         let mut args: Vec<u64> = Vec::new();
-        for i in 0..2 {
-            args.push(self.get_arg(i)?);
+        for i in 0..3 {
+            let _arg = self.get_arg(i)?;
+            let arg = self.read_arg(_arg)?;
+            args.push(arg);
         }
 
         // add syscall to manager
@@ -158,7 +161,7 @@ impl Ptrace {
         info!("ptrace-ing with PTRACE_SYSCALL to SYS_EXIT");
         helpers::syscall(self.pid)
             .map_err(|e| TraceError::PtraceError {
-                call: "SYSCALL", reason: e.to_string()
+                call: "SYSCALL", reason: e
             })?;
 
         if let Some(status) = self.wait() {
@@ -204,19 +207,27 @@ impl Ptrace {
         /* TODO: implement registers for 32-bit binaries
         #[cfg(target_arch = "x86")]
         let offset = match reg {
-            0 => regs::EDI,
-            1 => regs::ESI,
+            0 => regs::EBX,
+            1 => regs::ECX,
             2 => regs::EDX,
-            3 => regs::ECX,
-            4 => regs::E8,
-            5 => regs::E9,
+            3 => regs::ESI,
+            4 => regs::EDI,
+            5 => regs::EBP,
             _ => panic!("Unmatched argument offset")
         };
         */
         helpers::peek_user(self.pid, offset)
             .map(|x| x as u64)
             .map_err(|e| TraceError::PtraceError {
-                call: "PEEK_USER", reason: e.to_string()
+                call: "PEEK_USER", reason: e
+            })
+    }
+
+    fn read_arg(&mut self, addr: u64) -> Result<u64, TraceError> {
+        helpers::peek_text(self.pid, addr as i64)
+            .map(|x| x as u64)
+            .map_err(|e| TraceError::PtraceError {
+                call: "PEEK_TEXT", reason: e
             })
     }
 
@@ -227,7 +238,7 @@ impl Ptrace {
         helpers::peek_user(self.pid, regs::ORIG_RAX)
             .map(|x| x as u64)
             .map_err(|e| TraceError::PtraceError {
-                call: "PEEK_USER", reason: e.to_string()
+                call: "PEEK_USER", reason: e
             })
     }
 }

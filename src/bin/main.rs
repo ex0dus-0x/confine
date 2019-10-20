@@ -90,12 +90,12 @@ impl TraceProc {
     /// `run_trace()` takes an initialized TraceProc with mode and execute a normal trace, and store to struct.
     /// Once traced, we can preemptively output the trace as well, in the case the user only wants a trace.
     fn run_trace(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
-        self.manager = Some(self.mode.trace(args)?);
+        let table = Some(self.mode.trace(args)?);
         if output {
             if !self.json {
-                println!("{}", self.manager.unwrap())
+                println!("{}", table.unwrap())
             } else {
-                println!("{}", self.manager.unwrap().to_json()?);
+                println!("{}", table.unwrap().to_json()?);
             }
         }
         Ok(())
@@ -212,6 +212,7 @@ fn main() {
         .policy_config(policy_path);
 
     // run trace depending on arguments specified
+    info!("Executing a trace with process handler");
     if let Err(e) = proc.run_trace(args, true) {
         panic!("{}", e);
     }

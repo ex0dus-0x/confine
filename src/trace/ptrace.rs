@@ -5,7 +5,6 @@
 //!     This is a re-implementation of `ptrace(2)` that allows safer
 //!     usage through a specialized helper function.
 
-#![allow(dead_code)]
 pub mod consts {
 
     /// these represent `PtraceRequest`s a tracer
@@ -90,7 +89,7 @@ pub mod consts {
         pub const RSI:		   RegVal = 13 * 8;
         pub const RDI:		   RegVal = 14 * 8;
         pub const ORIG_RAX:    RegVal = 15 * 8;
-        pub const RIP: 		   u64    = 16 * 8;
+        pub const RIP: 		   i64    = 16 * 8;
 
         pub const CS: 		   RegVal = 17 * 8;
         pub const EFLAGS: 	   RegVal = 18 * 8;
@@ -163,14 +162,14 @@ mod ptrace {
 /// in order to perform process debugging.
 pub mod helpers {
     use std::{ptr, mem};
-    use std::io::{Error, ErrorKind};
+    use std::io::{Error, ErrorKind, Result};
     use libc::pid_t;
 
     use super::{consts, ptrace};
 
 
     /// alias the pid_t for better clarification
-    type InferiorType = pid_t;
+    type Pid = pid_t;
 
     /// alias a null pointer type for ptrace type parameter
     const NULL: *mut libc::c_void = ptr::null_mut();
@@ -179,7 +178,7 @@ pub mod helpers {
     /// `traceme()` call with error-checking. PTRACE_TRACEME is used as a method
     /// used to check the process that the user is currently in, such as ensuring that
     /// a fork call actually spawned off a child process.
-    pub fn traceme() -> Result<(), Error> {
+    pub fn traceme() -> Result<()> {
         if let Err(e) = ptrace::exec_ptrace(consts::requests::PTRACE_TRACEME, 0, NULL, NULL) {
             let err = Error::new(ErrorKind::Other, e.desc());
             return Err(err);
@@ -190,8 +189,19 @@ pub mod helpers {
 
     /// `syscall()` call with error-checking. PTRACE_SYSCALL is used when tracer steps through
     /// syscall entry/exit in trace, and enables debugging process to perform further introspection.
-    pub fn syscall(pid: InferiorType) -> Result<i64, Error> {
-        match ptrace::exec_ptrace(consts::requests::PTRACE_SYSCALL, pid, NULL, NULL) {
+    pub fn syscall(pid: Pid) -> Result<()> {
+        if let Err(e) = ptrace::exec_ptrace(consts::requests::PTRACE_SYSCALL, pid, NULL, NULL) {
+            let err = Error::new(ErrorKind::Other, e.desc());
+            return Err(err);
+        }
+        Ok(())
+    }
+
+
+    /// `peek_user()` call with error-checking. PTRACE_PEEKUSER is used in order to
+    /// introspect register values when encountering SYSCALL_ENTER or SYSCALL_EXIT.
+    pub fn peek_user(pid: Pid, register: i64) -> Result<i64> {
+        match ptrace::exec_ptrace(consts::requests::PTRACE_PEEKUSER, pid, register as *mut libc::c_void, NULL) {
             Err(e) => {
                 let err = Error::new(ErrorKind::Other, e.desc());
                 Err(err)
@@ -201,10 +211,11 @@ pub mod helpers {
     }
 
 
-    /// `peek_user()` call with error-checking. PTRACE_PEEKUSER is used in order to
-    /// introspect register values when encountering SYSCALL_ENTER or SYSCALL_EXIT.
-    pub fn peek_user(pid: InferiorType, register: i64) -> Result<i64, Error> {
-        match ptrace::exec_ptrace(consts::requests::PTRACE_PEEKUSER, pid, register as *mut libc::c_void, NULL){
+    /// `peek_text()` call with error-checking. PTRACE_TEXT is used to read from an address in tracee memory,
+    /// and then returning that as the result of the call.
+    pub fn peek_text(pid: Pid, addr: i64) -> Result<i64> {
+
+        match ptrace::exec_ptrace(consts::requests::PTRACE_PEEKTEXT, pid, addr as *mut libc::c_void, NULL) {
             Err(e) => {
                 let err = Error::new(ErrorKind::Other, e.desc());
                 Err(err)
@@ -217,7 +228,7 @@ pub mod helpers {
     /// `get_regs()` call with error-checking. PTRACE_GETREGS is used in order to
     /// get and store the currently set register state. The wrapper actually returns this back to
     /// the developer in a struct.
-    pub fn get_regs(pid: InferiorType) -> Result<libc::user_regs_struct, Error> {
+    pub fn get_regs(pid: Pid) -> Result<libc::user_regs_struct> {
         unsafe {
 
             // initialize uninitialized memory for register struct
@@ -236,7 +247,7 @@ pub mod helpers {
 
     /// `set_options()` called with error-checking. PTRACE_SETOPTIONS is called,
     /// with flag options set by users.
-    pub fn set_options(pid: InferiorType, options: i64) -> Result<(), Error> {
+    pub fn set_options(pid: Pid, options: i64) -> Result<()> {
         if let Err(e) = ptrace::exec_ptrace(consts::requests::PTRACE_SETOPTIONS, pid, NULL, options as *mut libc::c_void) {
             let err = Error::new(ErrorKind::Other, e.desc());
             return Err(err);
