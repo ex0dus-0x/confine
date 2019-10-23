@@ -107,8 +107,7 @@ pub mod consts {
 
 mod ptrace {
     use libc::{c_int, c_long, c_void, pid_t};
-    use nix::errno::Errno;
-
+    use std::io::Error;
 
     /// defines an `unsafe` foreign function interface to the `ptrace(2)` system call.
     /// `ptrace(2)`'s original C function definition is as follows:
@@ -125,7 +124,7 @@ mod ptrace {
 
     /// `exec_ptrace()` is the main and safest interface for calling the unsafe `ptrace` FFI.
     /// It does error-checking to ensure that the user receives errors through Result<T>, and
-    pub fn exec_ptrace(request: c_int, pid: pid_t, addr: *mut c_void, data: *mut c_void) -> Result<i64, Errno> {
+    pub fn exec_ptrace(request: c_int, pid: pid_t, addr: *mut c_void, data: *mut c_void) -> Result<i64, Error> {
         use super::consts::requests;
 
         // on PTRACE_PEEK* commands, a successful request might still return -1. As a result,
@@ -133,15 +132,14 @@ mod ptrace {
         match request {
             requests::PTRACE_PEEKTEXT | requests::PTRACE_PEEKDATA | requests::PTRACE_PEEKUSER => {
 
-                // grab return value of ptrace call (notice no semicolon)
+                // grab return value of ptrace call
                 let ret = unsafe {
-                    Errno::clear();
                     ptrace(request, pid, addr, data)
                 };
 
                 // error-check and ensure that errno is actually not a false positive
-                if (ret == -1) && (Errno::last() != Errno::UnknownErrno) {
-                    return Err(Errno::last());
+                if (ret < 0) {
+                    return Err(Error::from_raw_os_error(ret as i32));
                 }
                 return Ok(ret);
             },
@@ -150,7 +148,7 @@ mod ptrace {
 
         // for other conventional PTRACE_* commands
         match unsafe { ptrace(request, pid, addr, data) } {
-            -1 => Err(Errno::last()),
+            -1 => Err(Error::last_os_error()),
             _ => Ok(0)
         }
     }
@@ -179,49 +177,34 @@ pub mod helpers {
     /// used to check the process that the user is currently in, such as ensuring that
     /// a fork call actually spawned off a child process.
     pub fn traceme() -> Result<()> {
-        if let Err(e) = ptrace::exec_ptrace(consts::requests::PTRACE_TRACEME, 0, NULL, NULL) {
-            let err = Error::new(ErrorKind::Other, e.desc());
-            return Err(err);
+        match ptrace::exec_ptrace(consts::requests::PTRACE_TRACEME, 0, NULL, NULL) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e)
         }
-        Ok(())
     }
 
 
     /// `syscall()` call with error-checking. PTRACE_SYSCALL is used when tracer steps through
     /// syscall entry/exit in trace, and enables debugging process to perform further introspection.
     pub fn syscall(pid: Pid) -> Result<()> {
-        if let Err(e) = ptrace::exec_ptrace(consts::requests::PTRACE_SYSCALL, pid, NULL, NULL) {
-            let err = Error::new(ErrorKind::Other, e.desc());
-            return Err(err);
+        match ptrace::exec_ptrace(consts::requests::PTRACE_SYSCALL, pid, NULL, NULL) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e)
         }
-        Ok(())
     }
 
 
     /// `peek_user()` call with error-checking. PTRACE_PEEKUSER is used in order to
     /// introspect register values when encountering SYSCALL_ENTER or SYSCALL_EXIT.
     pub fn peek_user(pid: Pid, register: i64) -> Result<i64> {
-        match ptrace::exec_ptrace(consts::requests::PTRACE_PEEKUSER, pid, register as *mut libc::c_void, NULL) {
-            Err(e) => {
-                let err = Error::new(ErrorKind::Other, e.desc());
-                Err(err)
-            },
-            Ok(res) => Ok(res)
-        }
+        ptrace::exec_ptrace(consts::requests::PTRACE_PEEKUSER, pid, register as *mut libc::c_void, NULL)
     }
 
 
     /// `peek_text()` call with error-checking. PTRACE_TEXT is used to read from an address in tracee memory,
     /// and then returning that as the result of the call.
     pub fn peek_text(pid: Pid, addr: i64) -> Result<i64> {
-
-        match ptrace::exec_ptrace(consts::requests::PTRACE_PEEKTEXT, pid, addr as *mut libc::c_void, NULL) {
-            Err(e) => {
-                let err = Error::new(ErrorKind::Other, e.desc());
-                Err(err)
-            },
-            Ok(res) => Ok(res)
-        }
+        ptrace::exec_ptrace(consts::requests::PTRACE_PEEKTEXT, pid, addr as *mut libc::c_void, NULL)
     }
 
 
@@ -230,28 +213,24 @@ pub mod helpers {
     /// the developer in a struct.
     pub fn get_regs(pid: Pid) -> Result<libc::user_regs_struct> {
         unsafe {
-
             // initialize uninitialized memory for register struct
             let regs: libc::user_regs_struct = mem::uninitialized();
 
             // cast user_regs_struct to c_void using mem::transmute_copy
-            if let Err(e) = ptrace::exec_ptrace(consts::requests::PTRACE_GETREGS, pid, NULL,
-                                                mem::transmute_copy::<libc::user_regs_struct, *mut libc::c_void>(&regs)) {
-                let err = Error::new(ErrorKind::Other, e.desc());
-                return Err(err);
+            match ptrace::exec_ptrace(consts::requests::PTRACE_GETREGS, pid, NULL, mem::transmute_copy::<libc::user_regs_struct,
+                                      *mut libc::c_void>(&regs)) {
+                Ok(_) => Ok(regs),
+                Err(e) => Err(e)
             }
-            Ok(regs)
         }
     }
 
 
-    /// `set_options()` called with error-checking. PTRACE_SETOPTIONS is called,
-    /// with flag options set by users.
+    /// `set_options()` called with error-checking. PTRACE_SETOPTIONS is called, with flag options set by users.
     pub fn set_options(pid: Pid, options: i64) -> Result<()> {
-        if let Err(e) = ptrace::exec_ptrace(consts::requests::PTRACE_SETOPTIONS, pid, NULL, options as *mut libc::c_void) {
-            let err = Error::new(ErrorKind::Other, e.desc());
-            return Err(err);
+        match ptrace::exec_ptrace(consts::requests::PTRACE_SETOPTIONS, pid, NULL, options as *mut libc::c_void) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e)
         }
-        Ok(())
     }
 }

@@ -9,7 +9,12 @@ use libc::{pid_t, c_int};
 use unshare::Command;
 use unshare::Namespace;
 
+use bcc::core::BPF;
+
 use crate::syscall::SyscallManager;
+
+use failure::Error as FailError;
+use std::io::Error as IOError;
 
 pub mod ptrace;
 use self::ptrace::helpers;
@@ -26,7 +31,13 @@ pub enum TraceError {
     StepError { pid: pid_t, reason: String },
 
     #[fail(display = "PTRACE_{} failed with error `{}`", call, reason)]
-    PtraceError { call: &'static str, reason: std::io::Error }
+    PtraceError { call: &'static str, reason: IOError },
+
+    #[fail(display = "Could not initialize BPF source. Reason: {}", reason)]
+    BPFError { reason: FailError },
+
+    #[fail(display = "Could not attach kprobe to tracepoint {}. Reason: {}", tracepoint, reason)]
+    ProbeError { tracepoint: &'static str, reason: FailError },
 }
 
 
@@ -50,7 +61,33 @@ impl ProcessHandler for Ebpf {
         Self { manager: SyscallManager::new() }
     }
 
+    // FIXME(alan): wtf am i doing lmao
     fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
+
+        // TODO: replace
+        let code = include_str!("ebpf/template.c");
+
+        // initialize new BPF module
+        let mut module = BPF::new(code).map_err(|e|
+            TraceError::BPFError { reason: e }
+        )?;
+
+        // load kprobes on entry and return tracepoints for system calls
+        let trace_probes: Vec<std::fs::File> = ["trace_entry", "trace_return"].to_vec()
+            .iter()
+            .map(|tp| module.load_kprobe(tp).map_err(|e| TraceError::ProbeError {
+                tracepoint: tp, reason: e
+            }).unwrap()).collect();
+
+        // attach kprobe and kretprobe on system calls
+        self.manager.syscall_table
+            .iter()
+            .map(|(_, syscall)| {
+                let event = &format!("do_sys_{}", syscall);
+                module.attach_kprobe(event, trace_probes[0]);
+                module.attach_kretprobe(event, trace_probes[1]);
+            });
+
         Ok(self.manager.clone())
     }
 }
@@ -219,26 +256,29 @@ impl Ptrace {
         helpers::peek_user(self.pid, offset)
             .map(|x| x as u64)
             .map_err(|e| TraceError::PtraceError {
-                call: "PEEK_USER", reason: e
+                call: "PEEKUSER", reason: e
             })
     }
 
+
+    /// `read_arg()` uses ptrace with PEEKTEXT in order to read out
+    /// contents for a specified address.
     fn read_arg(&mut self, addr: u64) -> Result<u64, TraceError> {
         helpers::peek_text(self.pid, addr as i64)
             .map(|x| x as u64)
             .map_err(|e| TraceError::PtraceError {
-                call: "PEEK_TEXT", reason: e
+                call: "PEEKTEXT", reason: e
             })
     }
 
 
-    /// `get_syscall_num()` uses ptrace with PEEK_USER to return the
+    /// `get_syscall_num()` uses ptrace with PEEKUSER to return the
     /// syscall num from ORIG_RAX.
     fn get_syscall_num(&mut self) -> Result<u64, TraceError> {
         helpers::peek_user(self.pid, regs::ORIG_RAX)
             .map(|x| x as u64)
             .map_err(|e| TraceError::PtraceError {
-                call: "PEEK_USER", reason: e
+                call: "PEEKUSER", reason: e
             })
     }
 }

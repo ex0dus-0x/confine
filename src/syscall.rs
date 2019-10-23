@@ -48,7 +48,7 @@ pub struct SyscallManager {
     syscalls: Vec<Syscall>,
 
     #[serde(skip)]
-    pub _syscall_table: SyscallTable
+    pub syscall_table: SyscallTable
 }
 
 // TODO
@@ -64,7 +64,7 @@ impl SyscallManager {
         let syscall_table = SyscallManager::_parse_syscall_table().unwrap();
         Self {
             syscalls: Vec::new(),
-            _syscall_table: syscall_table
+            syscall_table: syscall_table
         }
     }
 
@@ -105,7 +105,7 @@ impl SyscallManager {
     pub fn add_syscall(&mut self, syscall_num: u64, args: Vec<u64>) -> () {
 
         // retrieve syscall name from HashMap by syscall_num key
-        let syscall_name = match self._syscall_table.get(&syscall_num) {
+        let syscall_name = match self.syscall_table.get(&syscall_num) {
             Some(s) => s,
             None => {
                 panic!("unable to determine corresponding syscall for number {}", syscall_num);

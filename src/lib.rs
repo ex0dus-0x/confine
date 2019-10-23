@@ -12,7 +12,6 @@ extern crate regex;
 extern crate toml;
 
 extern crate libc;
-extern crate nix;
 extern crate bcc;
 extern crate unshare;
 

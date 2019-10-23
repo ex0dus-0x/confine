@@ -214,6 +214,7 @@ fn main() {
     // run trace depending on arguments specified
     info!("Executing a trace with process handler");
     if let Err(e) = proc.run_trace(args, true) {
-        panic!("{}", e);
+        eprintln!("confine exception: {}", e);
+        eprintln!("{}", e.backtrace());
     }
 }
