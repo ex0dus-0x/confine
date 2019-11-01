@@ -61,10 +61,8 @@ impl ProcessHandler for Ebpf {
         Self { manager: SyscallManager::new() }
     }
 
-    // FIXME(alan): wtf am i doing lmao
-    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
 
-        // TODO: replace
+    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
         let code = include_str!("ebpf/template.c");
 
         // initialize new BPF module
@@ -72,22 +70,22 @@ impl ProcessHandler for Ebpf {
             TraceError::BPFError { reason: e }
         )?;
 
-        // load kprobes on entry and return tracepoints for system calls
-        let trace_probes: Vec<std::fs::File> = ["trace_entry", "trace_return"].to_vec()
-            .iter()
-            .map(|tp| module.load_kprobe(tp).map_err(|e| TraceError::ProbeError {
-                tracepoint: tp, reason: e
-            }).unwrap()).collect();
+        let entry_probe = module.load_kprobe("trace_entry").map_err(|e| {
+            TraceError::ProbeError { tracepoint: "trace_entry", reason: e }
+        })?;
+
+        let ret_probe = module.load_kprobe("trace_return").map_err(|e| {
+            TraceError::ProbeError { tracepoint: "trace_return", reason: e }
+        })?;
 
         // attach kprobe and kretprobe on system calls
         self.manager.syscall_table
             .iter()
             .map(|(_, syscall)| {
                 let event = &format!("do_sys_{}", syscall);
-                module.attach_kprobe(event, trace_probes[0]);
-                module.attach_kretprobe(event, trace_probes[1]);
+                module.attach_kprobe(event, entry_probe);
+                module.attach_kretprobe(event, ret_probe);
             });
-
         Ok(self.manager.clone())
     }
 }

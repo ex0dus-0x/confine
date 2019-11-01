@@ -24,7 +24,6 @@ use failure::Error;
 use confine::syscall::SyscallManager;
 use confine::logger::TraceLogger;
 use confine::policy::Policy;
-use confine::enforcers::Enforcer;
 use confine::trace::{ProcessHandler, Ptrace, Ebpf};
 
 
@@ -38,7 +37,6 @@ struct TraceProc {
     manager: Option<SyscallManager>,
     json: bool,
     common_policy: Option<Policy>,
-    //enforcer: Option<Box<Enforcer>>
 }
 
 impl Default for TraceProc {
@@ -47,8 +45,7 @@ impl Default for TraceProc {
             mode: Box::new(Ptrace::new()),
             manager: None,
             json: false,
-            common_policy: None,
-            //enforcer: None
+            common_policy: None
         }
     }
 }
