@@ -150,7 +150,7 @@ fn main() {
                 .short("m")
                 .long("trace_mode")
                 .possible_values(&["ebpf", "ptrace"])
-                .default_value("ptrace")
+                .default_value("ptrace") // TODO: swap to ebpf once implementation is solid
                 .takes_value(true)
                 .value_name("TRACE_MODE")
                 .required(false)
@@ -209,9 +209,16 @@ fn main() {
         .policy_config(policy_path);
 
     // run trace depending on arguments specified
-    info!("Executing a trace with process handler");
-    if let Err(e) = proc.run_trace(args, true) {
-        eprintln!("confine exception: {}", e);
-        eprintln!("{}", e.backtrace());
+    if !matches.is_present("policy_path") {
+        info!("Executing a normal trace with process handler");
+        if let Err(e) = proc.run_trace(args, true) {
+            eprintln!("confine exception: {}", e);
+            eprintln!("{}", e.backtrace());
+        }
+    } else if matches.is_present("policy_path") {
+        info!("Executing a trace with a specified policy file");
+        if let Err(e) = proc.run_trace_policy(args, policy_path); {
+
+        }
     }
 }
