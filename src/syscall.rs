@@ -29,14 +29,41 @@ static SYSCALL_REGEX: &str = r"#define\s*__NR_(\w+)\s*(\d+)";
 // type alias for syscall table hashmap
 type SyscallTable = HashMap<u64, String>;
 
+/// declares an action parsed by the userspace application and applied to
+/// system calls before trace.
+#[derive(Debug, Clone)]
+pub enum SyscallAction {
+    Permit,         // enable execution of system call
+    Warn,           // warns user through STDOUT, but continue trace
+    Block,          // SIGINT to trace execution when encountering call
+    Log(PathBuf)    // log syscall execution to log
+}
+
+/// Defines enum for various system call group, which classifies syscalls to groups that
+/// define generalized functionality.
+pub enum SyscallGroup {
+	FileIO,
+	ProcessControl,
+	Unspecified
+}
+
 
 /// Defines an arbitrary syscall, with support for de/serialization
-/// with serde_json. TODO(alan): define group, and whether we should run or not.
-#[derive(Serialize, Clone)]
+/// with serde_json.
+#[derive(Serialize, Clone, Debug)]
 pub struct Syscall {
     number: u64,
     name: String,
     args: Vec<u64>,
+
+	// TODO: silence if configured
+    #[serde(skip)]
+    group: SyscallGroup,
+
+    // Defines enforcement action when encountering system call.
+    // TODO: silence in trace output if not allowed
+    #[serde(skip)]
+    status: Option<SyscallAction>
 }
 
 
@@ -67,6 +94,7 @@ impl SyscallManager {
             syscall_table: syscall_table
         }
     }
+
 
     /// `_parse_syscall_table()` is a helper method that parses a "syscall table"
     /// and instantiates a HashMap that stores the syscall num as a key and the name

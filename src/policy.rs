@@ -3,54 +3,60 @@
 //!     Defines common confine policy format. Is used to then generate
 //!     output configs for enforcers, or actual contained enforcement.
 
-use std::{io, fs};
+use std::io;
+use std::fs::File;
 use std::boxed::Box;
 use std::path::PathBuf;
 use std::collections::HashMap;
 
-use crate::syscall::Syscall;
+use crate::syscall::SyscallAction;
 use crate::enforcers::Enforcer;
 
 
-/// declares an action parsed by the userspace application and applied to
-/// system calls before trace.
-enum SyscallAction {
-    Permit,
-    Warn,
-    Block
+// a type alias for a hashmap that provides a one-to-one mapping between syscall IDs and
+// action to perform.
+type PolicyMap = HashMap<u64, SyscallAction>;
+
+
+/// Deserializable structure for actually storing parsed policy contents after consuming
+/// TOML configuration.
+#[derive(Deserialize)]
+struct Policy {
+    job_name: String,
+    cmd_args: Option<Vec<String>>,
+    enforcer: Option<String>
+    // TODO
 }
-
-
-/// defines a policy hashmap where we initialize with default actions for
-/// system calls
-type PolicyMap = HashMap<Syscall, SyscallAction>;
-
-
-/// defines a parsed confine policy file
-#[derive(Debug, Clone)]
-pub struct Policy {
-    path: PathBuf,
-    enforcer: Box<Enforcer>,
-    policy_map: PolicyMap,
-}
-
 
 impl Policy {
-
-    /// `new_policy()` initializes a policy by parsing a TOML configuration into
-    /// a serializable Policy struct.
-    pub fn new_policy(path: PathBuf) -> io::Result<Self> {
-        let policy_map = Policy::parse_policy(path);
-        Ok(Self { path, policy_map })
+    fn from_file(path: PathBuf) -> Self {
+        let mut contents = String::new();
+        let mut file = File::open(&path)?;
+        file.read_to_string(&mut contents)?;
+        toml::from_str(&contents)
     }
 
-
-    /// `parse_policy` reads in the syscall config section of a config, and parses it into an appropriate
-    /// policy map for system calls with their configured actions
-    #[inline]
-    fn parse_policy(path: PathBuf) -> PolicyMap {
-        let mut map = PolicyMap::new();
-        map
-    }
 }
 
+
+/// defines an interface to policy parsing and handling. Stores internal map of
+/// policy actions to enforce, and an actual parsed policy
+#[derive(Debug, Clone)]
+pub struct PolicyInterface {
+    policy: Option<Policy>
+    policy_map: PolicyMap
+    //enforcer: Box<Enforcer>,
+}
+
+
+impl PolicyInterface {
+
+    /// `new_policy()` initializes an interface with a consumed policy file by parsing TOML into
+    /// a deserializable Policy for enforcer interaction.
+    pub fn new_policy(path: PathBuf) -> io::Result<Self> {
+        let policy = Policy::from_file(path)?;
+
+        let policy_map = Self::gen_policy_map
+        Ok(Self { policy, policy_map })
+    }
+}

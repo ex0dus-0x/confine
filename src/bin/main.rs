@@ -80,7 +80,7 @@ impl TraceProc {
 
     /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
     /// output policy enforcer format (ie seccomp, apparmor)
-    fn policy_config(self, policy: Option<PathBuf>, /*enforcer: Enforcer*/) -> TraceProc {
+    fn policy_config(self, policy: Option<PathBuf>, enforcer: Option<Box<Enforcer>>) -> TraceProc {
         self
     }
 
@@ -102,6 +102,7 @@ impl TraceProc {
     /// security policy on top of the running tracee, with the purpose of enabling policy testing while
     /// in a trusted and secure environment.
     fn run_trace_policy(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
+        // check if policy_path is set
         self.run_trace(args, output)?;
         Ok(())
     }
@@ -218,7 +219,8 @@ fn main() {
     } else if matches.is_present("policy_path") {
         info!("Executing a trace with a specified policy file");
         if let Err(e) = proc.run_trace_policy(args, policy_path); {
-
+            eprintln!("confine exception: {}", e);
+            eprintln!("{}", e.backtrace());
         }
     }
 }
