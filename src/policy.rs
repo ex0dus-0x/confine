@@ -4,6 +4,7 @@
 //!     output configs for enforcers, or actual contained enforcement.
 
 use std::io;
+use std::io::Read;
 use std::fs::File;
 use std::boxed::Box;
 use std::path::PathBuf;
@@ -20,7 +21,7 @@ type PolicyMap = HashMap<u64, SyscallAction>;
 
 /// Deserializable structure for actually storing parsed policy contents after consuming
 /// TOML configuration.
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone)]
 struct Policy {
     job_name: String,
     cmd_args: Option<Vec<String>>,
@@ -29,11 +30,11 @@ struct Policy {
 }
 
 impl Policy {
-    fn from_file(path: PathBuf) -> Self {
+    fn from_file(path: PathBuf) -> io::Result<Self> {
         let mut contents = String::new();
         let mut file = File::open(&path)?;
         file.read_to_string(&mut contents)?;
-        toml::from_str(&contents)
+        toml::from_str(&contents).unwrap()
     }
 
 }
@@ -43,8 +44,8 @@ impl Policy {
 /// policy actions to enforce, and an actual parsed policy
 #[derive(Debug, Clone)]
 pub struct PolicyInterface {
-    policy: Option<Policy>
-    policy_map: PolicyMap
+    policy: Option<Policy>,
+    policy_map: PolicyMap,
     //enforcer: Box<Enforcer>,
 }
 
@@ -54,9 +55,16 @@ impl PolicyInterface {
     /// `new_policy()` initializes an interface with a consumed policy file by parsing TOML into
     /// a deserializable Policy for enforcer interaction.
     pub fn new_policy(path: PathBuf) -> io::Result<Self> {
-        let policy = Policy::from_file(path)?;
+        let policy = Policy::from_file(path).unwrap();
+        let policy_map = Self::gen_policy_map();
 
-        let policy_map = Self::gen_policy_map
-        Ok(Self { policy, policy_map })
+        Ok(Self {
+                policy: Some(policy),
+                policy_map: policy_map
+        })
+    }
+
+    fn gen_policy_map() -> PolicyMap {
+        unimplemented!();
     }
 }

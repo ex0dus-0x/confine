@@ -8,10 +8,11 @@
 use std::io;
 use std::fmt;
 use std::fs::File;
+use std::path::PathBuf;
 use std::io::prelude::*;
 use std::collections::HashMap;
 
-use failure::Error;
+//use failure::Error;
 use regex::Regex;
 use serde::Serialize;
 
@@ -41,10 +42,11 @@ pub enum SyscallAction {
 
 /// Defines enum for various system call group, which classifies syscalls to groups that
 /// define generalized functionality.
+#[derive(Debug, Clone)]
 pub enum SyscallGroup {
-	FileIO,
-	ProcessControl,
-	Unspecified
+    FileIO,
+    ProcessControl,
+    Unspecified
 }
 
 
@@ -56,7 +58,7 @@ pub struct Syscall {
     name: String,
     args: Vec<u64>,
 
-	// TODO: silence if configured
+    // TODO: silence if configured
     #[serde(skip)]
     group: SyscallGroup,
 
@@ -144,7 +146,9 @@ impl SyscallManager {
         let syscall = Syscall {
             number: syscall_num,
             name: syscall_name.to_string(),
-            args: args
+            args: args,
+            group: SyscallGroup::Unspecified,
+            status: None
         };
         self.syscalls.push(syscall);
     }

@@ -107,9 +107,9 @@ impl TraceProc {
         Ok(())
     }
 
-    /// `generate_policy()` takes a parsed confine policy and generates a enforcer policy from the specific
-    /// enforcer module, and returns a path for consumption.
-    fn generate_policy(&self, output: PathBuf) -> () {
+    /// `generate_enforce_profile()` takes a parsed confine policy and generates a
+    /// profile for an enforcer module, and returns a path to write.
+    fn generate_enforce_profile(&self, output: PathBuf) -> () {
         ()
     }
 }

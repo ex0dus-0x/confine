@@ -138,7 +138,7 @@ mod ptrace {
                 };
 
                 // error-check and ensure that errno is actually not a false positive
-                if (ret < 0) {
+                if ret < 0 {
                     return Err(Error::from_raw_os_error(ret as i32));
                 }
                 return Ok(ret);
@@ -160,7 +160,7 @@ mod ptrace {
 /// in order to perform process debugging.
 pub mod helpers {
     use std::{ptr, mem};
-    use std::io::{Error, ErrorKind, Result};
+    use std::io::Result;
     use libc::pid_t;
 
     use super::{consts, ptrace};

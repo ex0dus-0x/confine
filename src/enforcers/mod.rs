@@ -2,14 +2,14 @@
 //!
 //!     Implements trait method for enforcers to bound to in module.
 
-use crate::policy::Policy;
+use crate::policy::PolicyInterface;
 
 
 pub trait Enforcer {
 
     /// `new()` initializes an enforcer with a specific policy for either outputting or enforcement
     /// under a contained runtime.
-    fn new(policy: Policy) -> Self;
+    fn new(policy: PolicyInterface) -> Self;
 
     /// `output_policy()` is used to generate a configuration for the specific enforcer module.
     fn output_policy(&self);
