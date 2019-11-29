@@ -23,7 +23,7 @@ use failure::Error;
 
 use confine::syscall::SyscallManager;
 use confine::logger::TraceLogger;
-use confine::policy::Policy;
+use confine::policy::PolicyInterface;
 use confine::trace::{ProcessHandler, Ptrace, Ebpf};
 
 
@@ -36,7 +36,7 @@ struct TraceProc {
     mode: Box<ProcessHandler>,
     manager: Option<SyscallManager>,
     json: bool,
-    common_policy: Option<Policy>,
+    common_policy: Option<PolicyInterface>,
 }
 
 impl Default for TraceProc {

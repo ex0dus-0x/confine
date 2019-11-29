@@ -1,4 +1,3 @@
-//! syscall.rs
 //!
 //!     Defines struct interface for system calls.
 //!
@@ -14,7 +13,7 @@ use std::collections::HashMap;
 
 //use failure::Error;
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 
 // path to unistd file with syscall number definitions, based on arch
@@ -32,7 +31,7 @@ type SyscallTable = HashMap<u64, String>;
 
 /// declares an action parsed by the userspace application and applied to
 /// system calls before trace.
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub enum SyscallAction {
     Permit,         // enable execution of system call
     Warn,           // warns user through STDOUT, but continue trace

@@ -7,8 +7,11 @@ use std::io;
 use std::io::Read;
 use std::fs::File;
 use std::boxed::Box;
+use std::error::Error;
 use std::path::PathBuf;
 use std::collections::HashMap;
+
+use serde::Deserialize;
 
 use crate::syscall::SyscallAction;
 use crate::enforcers::Enforcer;
@@ -19,22 +22,58 @@ use crate::enforcers::Enforcer;
 type PolicyMap = HashMap<u64, SyscallAction>;
 
 
-/// Deserializable structure for actually storing parsed policy contents after consuming
-/// TOML configuration.
+/// Deserializable structure for actually storing parsed policy contents after
+/// consuming TOML configuration. Comprises of several components in order to
+/// dictate a "complete" configuration:
+///
+/// - one header manifest section
+/// - one or multiple rule sections
 #[derive(Deserialize, Debug, Clone)]
 struct Policy {
-    job_name: String,
-    cmd_args: Option<Vec<String>>,
-    enforcer: Option<String>
-    // TODO
+    manifest: Manifest,
+    rules: Option<Vec<Rule>>
 }
 
+/// a `Manifest` is a required header per confine config. It is used
+/// to hold identifying information regarding the trace to be carried out,
+/// both basic configs and for rule enforcement.
+#[derive(Deserialize, Debug, Clone)]
+struct Manifest {
+
+    // name of task, job, identifier, etc.
+    #[serde(alias = "name")]
+    job_name: String,
+
+    // represents entirety of command (plus args) to trace
+    #[serde(alias = "command")]
+    cmd_args: Vec<String>,
+
+    // optionally represents an enforcer we want to generate
+    enforcer: Option<String>,
+
+    // TODO: output format
+}
+
+
+/// a `Rule` is a eserializable wrapper around a syscall rule
+/// that eventually decomposes down to our policy map.
+#[derive(Deserialize, Debug, Clone)]
+struct Rule {
+    // TODO: should also represent a group, or something else
+    syscall: String,
+    rule: SyscallAction
+}
+
+
 impl Policy {
-    fn from_file(path: PathBuf) -> io::Result<Self> {
+
+    /// `from_file()` initializes a deserialized Policy struct
+    /// from a configuration file
+    fn from_file(path: PathBuf) -> Result<Self, Box<dyn Error>> {
         let mut contents = String::new();
         let mut file = File::open(&path)?;
         file.read_to_string(&mut contents)?;
-        toml::from_str(&contents).unwrap()
+        toml::from_str(&contents).map_err(|e| e.into())
     }
 
 }

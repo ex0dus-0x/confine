@@ -23,5 +23,5 @@ libc = "0.2"
 bcc = "0.0.12"
 unshare = "0.5.1"
 
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.97", features = ["derive"] }
 serde_json = "1.0"

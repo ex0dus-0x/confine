@@ -49,7 +49,7 @@ pub trait ProcessHandler {
 }
 
 
-/// (TODO) wrapper interface for ebpf tracing. Contains methods for dynamic ebpf code generation
+/// wrapper interface for ebpf tracing. Contains methods for dynamic ebpf code generation
 /// for rust bcc bindings, and attaching hooks to read and parse syscall events.
 pub struct Ebpf {
     manager: SyscallManager
