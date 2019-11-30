@@ -24,6 +24,7 @@ use failure::Error;
 use confine::syscall::SyscallManager;
 use confine::logger::TraceLogger;
 use confine::policy::PolicyInterface;
+use confine::enforcers::Enforcer;
 use confine::trace::{ProcessHandler, Ptrace, Ebpf};
 
 
@@ -78,11 +79,13 @@ impl TraceProc {
         self
     }
 
+    /*
     /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
     /// output policy enforcer format (ie seccomp, apparmor)
     fn policy_config(self, policy: Option<PathBuf>, enforcer: Option<Box<Enforcer>>) -> TraceProc {
         self
     }
+    */
 
     /// `run_trace()` takes an initialized TraceProc with mode and execute a normal trace, and store to struct.
     /// Once traced, we can preemptively output the trace as well, in the case the user only wants a trace.
@@ -101,7 +104,7 @@ impl TraceProc {
     /// `run_trace_policy()` does a normal `run_trace()`, but instead also enforces the set common
     /// security policy on top of the running tracee, with the purpose of enabling policy testing while
     /// in a trusted and secure environment.
-    fn run_trace_policy(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
+    fn run_trace_policy(&mut self, args: Vec<String>, policy_path: Option<PathBuf>, output: bool) -> Result<(), Error> {
         // check if policy_path is set
         self.run_trace(args, output)?;
         Ok(())
@@ -206,8 +209,8 @@ fn main() {
     // initialize TraceProc interface
     info!("Starting up TraceProc instantiation");
     let mut proc = TraceProc::new(trace_mode)
-        .trace_config(matches.is_present("json"))
-        .policy_config(policy_path);
+        .trace_config(matches.is_present("json"));
+        //.policy_config(policy_path);
 
     // run trace depending on arguments specified
     if !matches.is_present("policy_path") {
@@ -218,7 +221,7 @@ fn main() {
         }
     } else if matches.is_present("policy_path") {
         info!("Executing a trace with a specified policy file");
-        if let Err(e) = proc.run_trace_policy(args, policy_path); {
+        if let Err(e) = proc.run_trace_policy(args, policy_path, true) {
             eprintln!("confine exception: {}", e);
             eprintln!("{}", e.backtrace());
         }
