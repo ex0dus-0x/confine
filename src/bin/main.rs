@@ -21,7 +21,6 @@ use clap::{App, Arg};
 use log::LevelFilter;
 use failure::Error;
 
-use confine::syscall::SyscallManager;
 use confine::logger::TraceLogger;
 use confine::policy::PolicyInterface;
 use confine::enforcers::Enforcer;
@@ -34,19 +33,17 @@ static LOGGER: TraceLogger = TraceLogger;
 /// `TraceProc` provides a builder interface for initializing and interacting with a specified PID. It implements
 /// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
 struct TraceProc {
-    mode: Box<ProcessHandler>,
-    manager: Option<SyscallManager>,
+    mode: Box<dyn ProcessHandler>,
     json: bool,
-    common_policy: Option<PolicyInterface>,
+    policy: Option<PolicyInterface>,
 }
 
 impl Default for TraceProc {
     fn default() -> Self {
         Self {
             mode: Box::new(Ptrace::new()),
-            manager: None,
             json: false,
-            common_policy: None
+            policy: None
         }
     }
 }
@@ -54,17 +51,17 @@ impl Default for TraceProc {
 
 impl TraceProc {
 
-    /// `new()` initializes a new TraceProc interface with PID and system call manager
-    /// that stores parsed system calls.
-    fn new(mode: Box<ProcessHandler>) -> TraceProc {
-        TraceProc { mode, ..TraceProc::default() }
+    /// `new()` initializes a new TraceProc interface with default attributes. Expects developer to build up struct
+    /// with following builder methods.
+    fn new() -> Self {
+        Self::default()
     }
 
-    /// `get_handler()` is a factory-like helper method that returns an instance of a trait object in a Box after
-    /// parsing an argument string. We do this to be able to parse out a struct that implements the ProcessHandler
-    /// trait bound.
+
+    /// `_parse_handler()` is a factory-like helper method that returns a trait object that represents the instance
+    /// of a struct that satisfies the ProcessHandler trait bound.
     #[inline]
-    fn get_handler(handler_str: &str) -> Box<ProcessHandler + 'static> {
+    fn _parse_handler(handler_str: &str) -> Box<dyn ProcessHandler + 'static> {
         match handler_str {
             "ptrace" => Box::new(Ptrace::new()),
             "ebpf" => Box::new(Ebpf::new()),
@@ -72,20 +69,30 @@ impl TraceProc {
         }
     }
 
-    /// `trace_config()` builds up TraceProc with tracing configuration options. Once configured, tracing under the
-    /// various modes of operation can be done.
-    fn trace_config(mut self, json: bool) -> TraceProc {
+
+    /// `trace_handler()` builds up TraceProc by parsing a user-specified handler input and instantiating the appropriate
+    /// one that implements the ProcessHandler trait bound.
+    fn trace_handler(mut self, handler_str: &str) -> Self {
+        self.mode = Self::_parse_handler(handler_str);
+        self
+    }
+
+
+    /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
+    /// output policy enforcer format (ie seccomp, apparmor)
+    fn policy_config(self, policy: PathBuf, /*_enforcer: Option<Box<dyn Enforcer>>*/) -> Self {
+        self.policy = PolicyInterface::new_policy(policy);
+        self
+    }
+
+
+    /// `out_json()` builds up and configures TraceProc to output json after trace.
+    /// TODO: should be enhanced in order to consume various serde-compatible file formats.
+    fn out_json(mut self, json: bool) -> Self {
         self.json = json;
         self
     }
 
-    /*
-    /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
-    /// output policy enforcer format (ie seccomp, apparmor)
-    fn policy_config(self, policy: Option<PathBuf>, enforcer: Option<Box<Enforcer>>) -> TraceProc {
-        self
-    }
-    */
 
     /// `run_trace()` takes an initialized TraceProc with mode and execute a normal trace, and store to struct.
     /// Once traced, we can preemptively output the trace as well, in the case the user only wants a trace.
@@ -101,19 +108,21 @@ impl TraceProc {
         Ok(())
     }
 
+
     /// `run_trace_policy()` does a normal `run_trace()`, but instead also enforces the set common
     /// security policy on top of the running tracee, with the purpose of enabling policy testing while
     /// in a trusted and secure environment.
-    fn run_trace_policy(&mut self, args: Vec<String>, policy_path: Option<PathBuf>, output: bool) -> Result<(), Error> {
+    fn run_trace_policy(&mut self, args: Vec<String>, policy_path: PathBuf, output: bool) -> Result<(), Error> {
         // check if policy_path is set
         self.run_trace(args, output)?;
         Ok(())
     }
 
+
     /// `generate_enforce_profile()` takes a parsed confine policy and generates a
     /// profile for an enforcer module, and returns a path to write.
     fn generate_enforce_profile(&self, output: PathBuf) -> () {
-        ()
+        unimplemented!()
     }
 }
 
@@ -122,7 +131,7 @@ impl TraceProc {
 fn main() {
     let matches = App::new("confine")
         .about("security-focused process tracer with policy handling capabilities")
-        .author("Trail of Bits")
+        .author("Alan Cao")
         .arg(
             Arg::with_name("command")
                 .help("Command to analyze as child, including positional arguments.")
@@ -141,7 +150,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("policy_enforcer")
-                .help("Policy enforcer to use for generation")
+                .help("Policy enforcer to use for generation, if not specified in confine policy")
                 .short("e")
                 .long("enforcer")
                 .takes_value(true)
@@ -154,7 +163,7 @@ fn main() {
                 .short("m")
                 .long("trace_mode")
                 .possible_values(&["ebpf", "ptrace"])
-                .default_value("ptrace") // TODO: swap to ebpf once implementation is solid
+                .default_value("ptrace")
                 .takes_value(true)
                 .value_name("TRACE_MODE")
                 .required(false)
@@ -200,17 +209,18 @@ fn main() {
     // determine trace mode of operation
     let mode = matches.value_of("trace_mode").unwrap();
     info!("Utilizing trace mode: {}", mode);
-    let trace_mode = TraceProc::get_handler(mode);
 
     // parse out policy generation options
     let policy_path = matches.value_of("policy_path")
-        .map(|p| PathBuf::from(p));
+        .map(|p| PathBuf::from(p)).unwrap();
+    info!("Using input policy path: {:?}", policy_path);
 
     // initialize TraceProc interface
     info!("Starting up TraceProc instantiation");
-    let mut proc = TraceProc::new(trace_mode)
-        .trace_config(matches.is_present("json"));
-        //.policy_config(policy_path);
+    let mut proc = TraceProc::new()
+        .trace_handler(mode)
+        .policy_config(policy_path)
+        .out_json(matches.is_present("json"));
 
     // run trace depending on arguments specified
     if !matches.is_present("policy_path") {

@@ -75,20 +75,16 @@ impl ProcessHandler for Ebpf {
             .iter()
             .map(|(_, syscall)| {
 
-                /*
+
                 let entry_probe = module.load_kprobe("trace_entry").map_err(|e| {
-                    TraceError::ProbeError { tracepoint: "trace_entry", reason: e }
-                })?;
+                    return TraceError::ProbeError { tracepoint: "trace_entry", reason: e };
+                });
 
                 let ret_probe = module.load_kprobe("trace_return").map_err(|e| {
-                    TraceError::ProbeError { tracepoint: "trace_return", reason: e }
-                })?;
-                */
+                    return TraceError::ProbeError { tracepoint: "trace_return", reason: e };
+                });
 
-                let entry_probe = module.load_kprobe("trace_entry").unwrap();
-                let ret_probe = module.load_kprobe("trace_return").unwrap();
-
-                let mut event = &format!("do_sys_{}", syscall);
+                let event = &format!("do_sys_{}", syscall);
                 module.attach_kprobe(event, entry_probe);
                 module.attach_kretprobe(event, ret_probe);
         });

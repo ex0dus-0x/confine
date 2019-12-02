@@ -9,6 +9,7 @@ use crate::policy::PolicyInterface;
 
 /// `EnforcerType` represents enforcers currently supported with confine policy generation, used for some
 /// configuration matching after deserialization.
+#[derive(Deserialize, Debug, Clone)]
 pub enum EnforcerType {
     Seccomp,
     AppArmor,
