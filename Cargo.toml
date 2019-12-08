@@ -1,7 +1,7 @@
 [package]
 name = "confine"
 version = "0.1.0"
-authors = ["Trail of Bits"]
+authors = ["Alan Cao"]
 
 [lib]
 name = "confine"

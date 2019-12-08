@@ -80,8 +80,13 @@ impl TraceProc {
 
     /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
     /// output policy enforcer format (ie seccomp, apparmor)
-    fn policy_config(self, policy: PathBuf, /*_enforcer: Option<Box<dyn Enforcer>>*/) -> Self {
-        self.policy = PolicyInterface::new_policy(policy);
+    fn policy_config(mut self, policy: PathBuf, /*_enforcer: Option<Box<dyn Enforcer>>*/) -> Self {
+
+        // TODO: better error-checking
+        self.policy = match PolicyInterface::new_policy(policy) {
+            Ok(_policy) => Some(_policy),
+            Err(e) => None,
+        };
         self
     }
 
@@ -112,8 +117,12 @@ impl TraceProc {
     /// `run_trace_policy()` does a normal `run_trace()`, but instead also enforces the set common
     /// security policy on top of the running tracee, with the purpose of enabling policy testing while
     /// in a trusted and secure environment.
-    fn run_trace_policy(&mut self, args: Vec<String>, policy_path: PathBuf, output: bool) -> Result<(), Error> {
-        // check if policy_path is set
+    fn run_trace_policy(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
+        // TODO: check if policy_path is set
+        if let None = self.policy {
+            unimplemented!()
+        }
+
         self.run_trace(args, output)?;
         Ok(())
     }
@@ -231,7 +240,7 @@ fn main() {
         }
     } else if matches.is_present("policy_path") {
         info!("Executing a trace with a specified policy file");
-        if let Err(e) = proc.run_trace_policy(args, policy_path, true) {
+        if let Err(e) = proc.run_trace_policy(args, true) {
             eprintln!("confine exception: {}", e);
             eprintln!("{}", e.backtrace());
         }

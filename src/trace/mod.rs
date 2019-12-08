@@ -63,6 +63,7 @@ impl ProcessHandler for Ebpf {
 
 
     fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
+
         let code = include_str!("ebpf/template.c");
 
         // initialize new BPF module
@@ -70,25 +71,30 @@ impl ProcessHandler for Ebpf {
             TraceError::BPFError { reason: e }
         )?;
 
+
         // attach kprobe and kretprobe on system calls
-        self.manager.syscall_table
-            .iter()
-            .map(|(_, syscall)| {
+        for (_, syscall) in self.manager.syscall_table.iter() {
+            let entry_probe = match module.load_kprobe("trace_entry") {
+                Ok(probe) => probe,
+                Err(e) => {
+                    return Err(TraceError::ProbeError { tracepoint: "trace_entry", reason: e });
+                }
+            };
 
+            let ret_probe = match module.load_kprobe("trace_return") {
+                Ok(probe) => probe,
+                Err(e) => {
+                    return Err(TraceError::ProbeError { tracepoint: "trace_return", reason: e });
+                }
+            };
 
-                let entry_probe = module.load_kprobe("trace_entry").map_err(|e| {
-                    return TraceError::ProbeError { tracepoint: "trace_entry", reason: e };
-                });
+            let event = &format!("do_sys_{}", syscall);
 
-                let ret_probe = module.load_kprobe("trace_return").map_err(|e| {
-                    return TraceError::ProbeError { tracepoint: "trace_return", reason: e };
-                });
+            module.attach_kprobe(event, entry_probe);
+            module.attach_kretprobe(event, ret_probe);
+        }
 
-                let event = &format!("do_sys_{}", syscall);
-                module.attach_kprobe(event, entry_probe);
-                module.attach_kretprobe(event, ret_probe);
-        });
-
+        // TODO
         Ok(self.manager.clone())
     }
 }
@@ -164,6 +170,7 @@ impl ProcessHandler for Ptrace {
         Ok(self.manager.clone())
      }
 }
+
 
 impl Ptrace {
 
