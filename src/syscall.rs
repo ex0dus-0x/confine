@@ -30,6 +30,7 @@ static SYSCALL_REGEX: &str = r"#define\s*__NR_(\w+)\s*(\d+)";
 // type alias for syscall table hashmap
 type SyscallTable = HashMap<u64, String>;
 
+
 /// declares an action parsed by the userspace application and applied to
 /// system calls before trace.
 #[derive(Deserialize, Debug, Clone)]
@@ -40,13 +41,27 @@ pub enum SyscallAction {
     Log(PathBuf)    // log syscall execution to log
 }
 
+
 /// Defines enum for various system call group, which classifies syscalls to groups that
 /// define generalized functionality.
+/// Inspired by: http://seclab.cs.sunysb.edu/sekar/papers/syscallclassif.htm
 #[derive(Debug, Clone)]
 pub enum SyscallGroup {
     FileIO,
     ProcessControl,
-    Unspecified
+    NetworkAccess,
+    MessageQueues,
+    SharedMemory,
+    TimeControl,
+    Ungrouped       // .. other miscellaneous system-related tasks
+}
+
+
+/// Enables us to readily convert a syscall name to a group, useful during
+/// execution and rule enforcement.
+// TODO
+impl From<&str> for SyscallGroup {
+
 }
 
 

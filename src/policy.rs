@@ -8,6 +8,7 @@ use std::io::Read;
 use std::fs::File;
 use std::boxed::Box;
 use std::error::Error;
+use std::convert::From;
 use std::path::PathBuf;
 use std::collections::HashMap;
 
@@ -22,18 +23,6 @@ use crate::enforcers::Enforcer;
 type PolicyMap = HashMap<u64, SyscallAction>;
 
 
-/// Deserializable structure for actually storing parsed policy contents after
-/// consuming TOML configuration. Comprises of several components in order to
-/// dictate a "complete" configuration:
-///
-/// - one header manifest section
-/// - one or multiple rule sections
-#[derive(Deserialize, Debug, Clone)]
-struct Policy {
-    manifest: Manifest,
-    rules: Option<Vec<Rule>>
-}
-
 /// a `Manifest` is a required header per confine config. It is used
 /// to hold identifying information regarding the trace to be carried out,
 /// both basic configs and for rule enforcement.
@@ -47,11 +36,24 @@ struct Manifest {
     // represents entirety of command (plus args) to trace
     #[serde(alias = "command")]
     cmd_args: Vec<String>,
+}
 
-    // optionally represents an enforcer we want to generate
-    enforcer: Option<String>,
 
-    // TODO: output format
+/// `SyscallType` implements the variants a user input for a syscall rule
+/// can be. It implements type conversion traits in order for serialization to
+/// convert to a valid type
+#[derive(Deserialize, Debug, Clone)]
+enum SyscallType {
+    Syscall(Syscall),
+    Group(SyscallGroup),
+    // .. TODO: other ways to identify syscalls
+}
+
+
+impl From<&str> for SyscallType {
+    fn from(input: &str) -> Self {
+
+    }
 }
 
 
@@ -59,11 +61,22 @@ struct Manifest {
 /// that eventually decomposes down to our policy map.
 #[derive(Deserialize, Debug, Clone)]
 struct Rule {
-    // TODO: should also represent a group, or something else
-    syscall: String,
+    syscall: SyscallType,
     rule: SyscallAction
 }
 
+
+/// Deserializable structure for actually storing parsed policy contents after
+/// consuming TOML configuration. Comprises of several components in order to
+/// dictate a "complete" configuration:
+///
+/// - one header manifest section
+/// - one or multiple rule sections
+#[derive(Deserialize, Debug, Clone)]
+struct Policy {
+    manifest: Manifest,
+    rules: Option<Vec<Rule>>
+}
 
 impl Policy {
 
@@ -75,7 +88,6 @@ impl Policy {
         file.read_to_string(&mut contents)?;
         toml::from_str(&contents).map_err(|e| e.into())
     }
-
 }
 
 
@@ -85,7 +97,6 @@ impl Policy {
 pub struct PolicyInterface {
     policy: Option<Policy>,
     policy_map: PolicyMap,
-    //enforcer: Box<Enforcer>,
 }
 
 
@@ -98,11 +109,13 @@ impl PolicyInterface {
         let policy_map = Self::gen_policy_map();
 
         Ok(Self {
-                policy: Some(policy),
-                policy_map: policy_map
+            policy: Some(policy),
+            policy_map: policy_map
         })
     }
 
+    /// `gen_policy_map` is a helper that takes a parsed `Policy` and creates a
+    /// HashMap mapping id values to enforced rules
     fn gen_policy_map() -> PolicyMap {
         unimplemented!();
     }
