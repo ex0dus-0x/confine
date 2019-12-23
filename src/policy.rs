@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::syscall::SyscallAction;
+use crate::syscall::{Syscall, SyscallAction, SyscallGroup};
 use crate::enforcers::Enforcer;
 
 
@@ -52,7 +52,7 @@ enum SyscallType {
 
 impl From<&str> for SyscallType {
     fn from(input: &str) -> Self {
-
+        unimplemented!()
     }
 }
 

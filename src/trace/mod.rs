@@ -10,6 +10,7 @@ use unshare::Command;
 use unshare::Namespace;
 
 use bcc::core::BPF;
+use bcc::perf;
 
 use crate::syscall::SyscallManager;
 
@@ -62,18 +63,25 @@ impl ProcessHandler for Ebpf {
     }
 
 
+    /// the `trace()` implementation for eBPF first instantiates from a source template,
+    /// and attaches a callback that reads syscall events from a perf map that parsed out
+    /// various components of a system call.
     fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
 
         let code = include_str!("ebpf/template.c");
 
+        // TODO: generate source per syscall
+
         // initialize new BPF module
-        let mut module = BPF::new(code).map_err(|e|
+        let mut module = BPF::new(code).map_err(|e| {
             TraceError::BPFError { reason: e }
-        )?;
+        })?;
 
 
         // attach kprobe and kretprobe on system calls
         for (_, syscall) in self.manager.syscall_table.iter() {
+
+            // initialize a kprobe at the event of entering a syscall
             let entry_probe = match module.load_kprobe("trace_entry") {
                 Ok(probe) => probe,
                 Err(e) => {
@@ -81,6 +89,7 @@ impl ProcessHandler for Ebpf {
                 }
             };
 
+            // initialize probe at event of syscall finishing execution
             let ret_probe = match module.load_kprobe("trace_return") {
                 Ok(probe) => probe,
                 Err(e) => {
@@ -94,8 +103,31 @@ impl ProcessHandler for Ebpf {
             module.attach_kretprobe(event, ret_probe);
         }
 
-        // TODO
+        let table = module.table("events");
+        let mut perf_map = perf::init_perf_map(table, Ebpf::perf_callback).map_err(|e| {
+            TraceError::BPFError { reason: e }
+        })?;
+
+        // TODO: break after a duration of execution, otherwise function doesn't return
+        loop {
+            perf_map.poll(200);
+        }
+
         Ok(self.manager.clone())
+    }
+}
+
+
+impl Ebpf {
+
+    /// `perf_callback` is a callback routine invoked by bcc when encountering syscall events. Reads and parses
+    /// a structure that encapsulates a system call, and outputs accordingly to a syscall manager.
+    /// TODO
+    #[inline]
+    fn perf_callback() -> Box<FnMut(&[u8]) + Send> {
+        Box::new(|_| {
+
+        })
     }
 }
 

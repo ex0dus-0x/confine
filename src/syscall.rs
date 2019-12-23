@@ -45,7 +45,7 @@ pub enum SyscallAction {
 /// Defines enum for various system call group, which classifies syscalls to groups that
 /// define generalized functionality.
 /// Inspired by: http://seclab.cs.sunysb.edu/sekar/papers/syscallclassif.htm
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub enum SyscallGroup {
     FileIO,
     ProcessControl,
@@ -61,13 +61,21 @@ pub enum SyscallGroup {
 /// execution and rule enforcement.
 // TODO
 impl From<&str> for SyscallGroup {
+    fn from(input: &str) -> Self {
+        unimplemented!()
+    }
+}
 
+impl Default for SyscallGroup {
+    fn default() -> Self {
+        SyscallGroup::Ungrouped
+    }
 }
 
 
 /// Defines an arbitrary syscall, with support for de/serialization
 /// with serde_json.
-#[derive(Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Syscall {
     number: u64,
     name: String,
@@ -162,7 +170,7 @@ impl SyscallManager {
             number: syscall_num,
             name: syscall_name.to_string(),
             args: args,
-            group: SyscallGroup::Unspecified,
+            group: SyscallGroup::default(),
             status: None
         };
         self.syscalls.push(syscall);

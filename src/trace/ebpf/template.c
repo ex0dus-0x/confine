@@ -6,21 +6,19 @@
  */
 
 #include <uapi/linux/ptrace.h>
-#include <uapi/linux/limits.h>
+#include <linux/blkdev.h>
 
-struct key_t {
-	long syscall_nr;
-	u32 tid;
-};
+BPF_PERF_OUTPUT(events);
 
-
-TRACEPOINT_PROBE(raw_syscalls, sys_enter) {
-
-
-};
-
-
-TRACEPOINT_PROBE(raw_syscalls, sys_exit) {
-
-
+/*
+ * kprobe callback routine that is attached to each system call. {SYSCALL} represents
+ * name of the syscall as parsed out in unistd.h. Parses out parameter content through
+ * `ptrace` PT_REGS routines.
+ */
+int kprobe__{SYSCALL}(struct pt_regs *ctx)
+{
+	/* TODO: syscall content in struct */
+	bpf_trace_printk("syscall!\n");
+	events.perf_submit(ctx, &data, sizeof(data));
+	return 0;
 };
