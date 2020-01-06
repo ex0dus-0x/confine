@@ -9,7 +9,6 @@
 //!      - enforcer API for policy generation and enforcement
 
 extern crate regex;
-extern crate toml;
 
 extern crate libc;
 extern crate bcc;
@@ -17,6 +16,7 @@ extern crate unshare;
 
 extern crate serde;
 extern crate serde_json;
+extern crate serde_yaml;
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate failure;

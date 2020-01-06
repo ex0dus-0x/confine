@@ -1,0 +1,14 @@
+manifest:
+  name: example
+  command: ["example", "command"]
+  enforccer: seccomp
+
+rules:
+  - name: Open block rule
+    syscall: open
+    action: BLOCK
+
+  - name: Close block rule
+    syscall: close
+    action: BLOCK
+

@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 use crate::syscall::{Syscall, SyscallAction, SyscallGroup};
-use crate::enforcers::Enforcer;
+use crate::enforcers::EnforcerType;
 
 
 // a type alias for a hashmap that provides a one-to-one mapping between syscall IDs and
@@ -36,6 +36,9 @@ struct Manifest {
     // represents entirety of command (plus args) to trace
     #[serde(alias = "command")]
     cmd_args: Vec<String>,
+
+    // represents the enforcer to generate policy for
+    enforcer: Option<EnforcerType>
 }
 
 
@@ -50,24 +53,18 @@ enum SyscallType {
 }
 
 
-impl From<&str> for SyscallType {
-    fn from(input: &str) -> Self {
-        unimplemented!()
-    }
-}
-
-
 /// a `Rule` is a eserializable wrapper around a syscall rule
 /// that eventually decomposes down to our policy map.
 #[derive(Deserialize, Debug, Clone)]
 struct Rule {
+    name: Option<String>,
     syscall: SyscallType,
     rule: SyscallAction
 }
 
 
 /// Deserializable structure for actually storing parsed policy contents after
-/// consuming TOML configuration. Comprises of several components in order to
+/// consuming YAML configuration. Comprises of several components in order to
 /// dictate a "complete" configuration:
 ///
 /// - one header manifest section
@@ -78,6 +75,7 @@ struct Policy {
     rules: Option<Vec<Rule>>
 }
 
+
 impl Policy {
 
     /// `from_file()` initializes a deserialized Policy struct
@@ -86,7 +84,7 @@ impl Policy {
         let mut contents = String::new();
         let mut file = File::open(&path)?;
         file.read_to_string(&mut contents)?;
-        toml::from_str(&contents).map_err(|e| e.into())
+        serde_yaml::from_str(&contents).map_err(|e| e.into())
     }
 }
 
@@ -96,13 +94,13 @@ impl Policy {
 #[derive(Debug, Clone)]
 pub struct PolicyInterface {
     policy: Option<Policy>,
-    policy_map: PolicyMap,
+    policy_map: PolicyMap
 }
 
 
 impl PolicyInterface {
 
-    /// `new_policy()` initializes an interface with a consumed policy file by parsing TOML into
+    /// `new_policy()` initializes an interface with a consumed policy file by parsing YAML into
     /// a deserializable Policy for enforcer interaction.
     pub fn new_policy(path: PathBuf) -> io::Result<Self> {
         let policy = Policy::from_file(path).unwrap();

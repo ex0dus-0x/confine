@@ -99,8 +99,13 @@ impl ProcessHandler for Ebpf {
 
             let event = &format!("do_sys_{}", syscall);
 
-            module.attach_kprobe(event, entry_probe);
-            module.attach_kretprobe(event, ret_probe);
+            if let Err(e) = module.attach_kprobe(event, entry_probe) {
+                return Err(TraceError::BPFError { reason: e });
+            }
+
+            if let Err(e) = module.attach_kretprobe(event, ret_probe) {
+                return Err(TraceError::BPFError { reason: e });
+            }
         }
 
         let table = module.table("events");

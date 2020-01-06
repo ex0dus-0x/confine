@@ -28,5 +28,5 @@ pub trait Enforcer {
     fn new(policy: PolicyInterface) -> Self;
 
     /// `output_policy()` is used to generate a configuration for the specific enforcer module.
-    fn output_policy(&self);
+    fn output_policy(&self) -> &'static str;
 }

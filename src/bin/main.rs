@@ -140,7 +140,7 @@ impl TraceProc {
 fn main() {
     let matches = App::new("confine")
         .about("security-focused process tracer with policy handling capabilities")
-        .author("Alan Cao")
+        .author("ex0dus-0x <ex0dus at codemuch.tech>")
         .arg(
             Arg::with_name("command")
                 .help("Command to analyze as child, including positional arguments.")
@@ -155,15 +155,6 @@ fn main() {
                 .long("policy")
                 .takes_value(true)
                 .value_name("POLICY_PATH")
-                .required(false)
-        )
-        .arg(
-            Arg::with_name("policy_enforcer")
-                .help("Policy enforcer to use for generation, if not specified in confine policy")
-                .short("e")
-                .long("enforcer")
-                .takes_value(true)
-                .value_name("ENFORCER")
                 .required(false)
         )
         .arg(

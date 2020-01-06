@@ -1,8 +1,0 @@
-[manifest]
-name = "example"
-command = ["this", "is", "my", "command"]
-enforcer = "seccomp"
-
-[rule]
-syscall: open
-action: BLOCK

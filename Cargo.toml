@@ -13,7 +13,6 @@ path = "src/bin/main.rs"
 
 [dependencies]
 clap = "2.33.0"
-toml = "0.5.3"
 log = "0.4.6"
 regex = "1.2.0"
 failure = "0.1.5"
@@ -25,3 +24,4 @@ unshare = "0.5.1"
 
 serde = { version = "1.0.97", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.8"
