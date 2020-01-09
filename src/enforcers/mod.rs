@@ -23,9 +23,9 @@ pub enum EnforcerType {
 /// Linux module
 pub trait Enforcer {
 
-    /// `new()` initializes an enforcer with a specific policy for either outputting or enforcement
+    /// `from_policy()` initializes an enforcer with a specific policy for either outputting or enforcement
     /// under a contained runtime.
-    fn new(policy: PolicyInterface) -> Self;
+    fn from_policy(policy: PolicyInterface) -> Self;
 
     /// `output_policy()` is used to generate a configuration for the specific enforcer module.
     fn output_policy(&self) -> &'static str;
