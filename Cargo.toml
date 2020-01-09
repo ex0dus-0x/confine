@@ -3,13 +3,9 @@ name = "confine"
 version = "0.1.0"
 authors = ["Alan Cao"]
 
-[lib]
-name = "confine"
-path = "src/lib.rs"
-
 [[bin]]
 name = "confine"
-path = "src/bin/main.rs"
+path = "src/bin/confine.rs"
 
 [dependencies]
 clap = "2.33.0"

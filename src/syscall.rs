@@ -5,30 +5,31 @@
 //!     Implements a parser for unistd.h's syscall table
 //!     in order to generate system calls with correct names.
 
-use std::io;
 use std::fmt;
 use std::fs::File;
 use std::path::PathBuf;
 use std::io::prelude::*;
 use std::collections::HashMap;
 
-//use failure::Error;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+// TODO: check paths preemptively
 
 // path to unistd file with syscall number definitions, based on arch
 #[cfg(target_arch = "x86_64")]
-static SYSCALL_TABLE: &str = "/usr/include/x86_64-linux-gnu/asm/unistd_64.h";
+//static SYSCALL_TABLE: &str = "/usr/include/x86_64-linux-gnu/asm/unistd_64.h";
+static SYSCALL_TABLE: &str = "/usr/include/asm/unistd_64.h";
 
 #[cfg(target_arch = "x86")]
-static SYSCALL_TABLE: &str = "/usr/include/i386-linux-gnu/asm/unistd_32.h";
+//static SYSCALL_TABLE: &str = "/usr/include/i386-linux-gnu/asm/unistd_32.h";
+static SYSCALL_TABLE: &str = "/usr/include/asm/unistd_32.h";
 
 // regex for parsing macro definitions of syscall numbers
 static SYSCALL_REGEX: &str = r"#define\s*__NR_(\w+)\s*(\d+)";
 
 // type alias for syscall table hashmap
-type SyscallTable = HashMap<u64, String>;
+pub type SyscallTable = HashMap<u64, String>;
 
 
 /// declares an action parsed by the userspace application and applied to
@@ -59,7 +60,6 @@ pub enum SyscallGroup {
 
 /// Enables us to readily convert a syscall name to a group, useful during
 /// execution and rule enforcement.
-// TODO
 impl From<&str> for SyscallGroup {
     fn from(input: &str) -> Self {
         unimplemented!()
@@ -77,11 +77,10 @@ impl Default for SyscallGroup {
 /// with serde_json.
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Syscall {
-    number: u64,
-    name: String,
+    pub number: u64,
+    pub name: String,
     args: Vec<u64>,
 
-    // TODO: silence if configured
     #[serde(skip)]
     group: SyscallGroup,
 
@@ -92,7 +91,7 @@ pub struct Syscall {
 }
 
 
-/// SyscallManager stores a vector of Syscalls and manages a HashMap
+/// `SyscallManager` stores a vector of Syscalls and manages a HashMap
 /// that stores syscall num and name mappings.
 #[derive(Serialize, Clone)]
 #[serde(rename = "syscalls")]
@@ -103,9 +102,21 @@ pub struct SyscallManager {
     pub syscall_table: SyscallTable
 }
 
-// TODO
-//#[derive(Debug, Fail)]
-//struct SysManagerError();
+
+/// `SysManagerError` defines failures that can occur during
+/// system call parsing.
+#[derive(Debug, Fail)]
+pub enum SyscallError {
+
+    #[fail(display = "File i/o error with parsing syscalls")]
+    IOError(std::io::Error),
+
+    #[fail(display = "System call number {} not supported", id)]
+    UnsupportedSyscall { id: u64 },
+
+    #[fail(display = "Cannot parse out a system call table. Reason: {}", reason)]
+    SyscallTableError { reason: &'static str },
+}
 
 
 impl SyscallManager {
@@ -113,7 +124,7 @@ impl SyscallManager {
     /// `new()` initializes a manager with a parsed system call table,
     /// ready for storing syscalls.
     pub fn new() -> Self {
-        let syscall_table = SyscallManager::_parse_syscall_table().unwrap();
+        let syscall_table = SyscallManager::parse_syscall_table().unwrap();
         Self {
             syscalls: Vec::new(),
             syscall_table: syscall_table
@@ -121,19 +132,21 @@ impl SyscallManager {
     }
 
 
-    /// `_parse_syscall_table()` is a helper method that parses a "syscall table"
+    /// `parse_syscall_table()` is a helper method that parses a "syscall table"
     /// and instantiates a HashMap that stores the syscall num as a key and the name
     /// as the value.
     #[inline]
-    fn _parse_syscall_table() -> io::Result<SyscallTable> {
+    pub fn parse_syscall_table() -> Result<SyscallTable, SyscallError> {
 
         // read unistd.h for macro definitions
-        let mut tbl_file = File::open(SYSCALL_TABLE)?;
-        let mut contents = String::new();
-        tbl_file.read_to_string(&mut contents)?;
+        let mut tbl_file = File::open(SYSCALL_TABLE).map_err(SyscallError::IOError)?;
 
+        let mut contents = String::new();
+        tbl_file.read_to_string(&mut contents).map_err(SyscallError::IOError)?;
+
+        // TODO: return SyscallError
         lazy_static! {
-            static ref RE: Regex = Regex::new(SYSCALL_REGEX).expect("cannot initialize regex object");
+            static ref RE: Regex = Regex::new(SYSCALL_REGEX).expect("cannot parse regex");
         }
 
         // find matches and store as 2-ary tuple in vector
@@ -141,10 +154,12 @@ impl SyscallManager {
             let groups = (cap.get(2), cap.get(1));
             match groups {
                 (Some(ref num), Some(ref name)) => {
-                    Some((num.as_str().parse::<u64>().expect("unable to parse u64 syscall number"),
-                    name.as_str().to_string()))
+                    Some(
+                        // TODO: return SyscallError
+                        (num.as_str().parse::<u64>().expect("cannot parse u64 syscall id"), name.as_str().to_string())
+                    )
                 },
-                _ => None
+                _ => None,
             }
         }).collect();
 
@@ -155,13 +170,13 @@ impl SyscallManager {
 
     /// `add_syscall()` finds a corresponding syscall name from
     /// a parsed syscall table and instantiates and stores a new Syscall.
-    pub fn add_syscall(&mut self, syscall_num: u64, args: Vec<u64>) -> () {
+    pub fn add_syscall(&mut self, syscall_num: u64, args: Vec<u64>) -> Result<(), SyscallError> {
 
         // retrieve syscall name from HashMap by syscall_num key
         let syscall_name = match self.syscall_table.get(&syscall_num) {
             Some(s) => s,
             None => {
-                panic!("unable to determine corresponding syscall for number {}", syscall_num);
+                return Err(SyscallError::UnsupportedSyscall { id: syscall_num });
             }
         };
 
@@ -174,6 +189,7 @@ impl SyscallManager {
             status: None
         };
         self.syscalls.push(syscall);
+        Ok(())
     }
 
 

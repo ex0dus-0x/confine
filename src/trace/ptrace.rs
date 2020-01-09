@@ -56,21 +56,21 @@ pub mod consts {
         /// parameter when calling ptrace with PTRACE_SETOPTIONS
         type PtraceOption = c_int;
 
-	pub const PTRACE_O_TRACESYSGOOD:   PtraceOption = 0x01;
+        pub const PTRACE_O_TRACESYSGOOD:   PtraceOption = 0x01;
         pub const PTRACE_O_TRACEFORK:	   PtraceOption = 0x02;
         pub const PTRACE_O_TRACEVFORK:	   PtraceOption = 0x03;
         pub const PTRACE_O_TRACECLONE:	   PtraceOption = 0x04;
         pub const PTRACE_O_TRACEEXEC:	   PtraceOption = 0x05;
         pub const PTRACE_O_TRACEVFORKDONE: PtraceOption = 0x06;
         pub const PTRACE_O_TRACEEXIT: 	   PtraceOption = 0x07;
-	pub const PTRACE_O_TRACESECCOMP:   PtraceOption = 0x08;
+        pub const PTRACE_O_TRACESECCOMP:   PtraceOption = 0x08;
     }
 
 
     pub mod regs {
 
-	/// i64 represents value register value
-	type RegVal = i64;
+	    /// usize represents value register value
+        pub type RegVal = usize;
 
         pub const R15:		   RegVal = 0 * 8;
         pub const R14:		   RegVal = 1 * 8;
@@ -89,7 +89,7 @@ pub mod consts {
         pub const RSI:		   RegVal = 13 * 8;
         pub const RDI:		   RegVal = 14 * 8;
         pub const ORIG_RAX:    RegVal = 15 * 8;
-        pub const RIP: 		   i64    = 16 * 8;
+        pub const RIP: 		   RegVal = 16 * 8;
 
         pub const CS: 		   RegVal = 17 * 8;
         pub const EFLAGS: 	   RegVal = 18 * 8;
@@ -100,7 +100,7 @@ pub mod consts {
         pub const DS:		   RegVal = 23 * 8;
         pub const ES:		   RegVal = 24 * 8;
         pub const FS:		   RegVal = 25 * 8;
-	pub const GS:		   RegVal = 26 * 8;
+        pub const GS:		   RegVal = 26 * 8;
     }
 }
 
@@ -196,14 +196,14 @@ pub mod helpers {
 
     /// `peek_user()` call with error-checking. PTRACE_PEEKUSER is used in order to
     /// introspect register values when encountering SYSCALL_ENTER or SYSCALL_EXIT.
-    pub fn peek_user(pid: Pid, register: i64) -> Result<i64> {
+    pub fn peek_user(pid: Pid, register: consts::regs::RegVal) -> Result<i64> {
         ptrace::exec_ptrace(consts::requests::PTRACE_PEEKUSER, pid, register as *mut libc::c_void, NULL)
     }
 
 
     /// `peek_text()` call with error-checking. PTRACE_TEXT is used to read from an address in tracee memory,
     /// and then returning that as the result of the call.
-    pub fn peek_text(pid: Pid, addr: i64) -> Result<i64> {
+    pub fn peek_text(pid: Pid, addr: consts::regs::RegVal) -> Result<i64> {
         ptrace::exec_ptrace(consts::requests::PTRACE_PEEKTEXT, pid, addr as *mut libc::c_void, NULL)
     }
 
@@ -214,7 +214,7 @@ pub mod helpers {
     pub fn get_regs(pid: Pid) -> Result<libc::user_regs_struct> {
         unsafe {
             // initialize uninitialized memory for register struct
-            let regs: libc::user_regs_struct = mem::uninitialized();
+            let regs: libc::user_regs_struct = mem::MaybeUninit::zeroed().assume_init();
 
             // cast user_regs_struct to c_void using mem::transmute_copy
             match ptrace::exec_ptrace(consts::requests::PTRACE_GETREGS, pid, NULL, mem::transmute_copy::<libc::user_regs_struct,
@@ -227,7 +227,7 @@ pub mod helpers {
 
 
     /// `set_options()` called with error-checking. PTRACE_SETOPTIONS is called, with flag options set by users.
-    pub fn set_options(pid: Pid, options: i64) -> Result<()> {
+    pub fn set_options(pid: Pid, options: consts::regs::RegVal) -> Result<()> {
         match ptrace::exec_ptrace(consts::requests::PTRACE_SETOPTIONS, pid, NULL, options as *mut libc::c_void) {
             Ok(_) => Ok(()),
             Err(e) => Err(e)

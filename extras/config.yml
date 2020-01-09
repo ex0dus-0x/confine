@@ -1,7 +1,5 @@
 manifest:
-  name: example
-  command: ["example", "command"]
-  enforccer: seccomp
+  enforcer: seccomp
 
 rules:
   - name: Open block rule

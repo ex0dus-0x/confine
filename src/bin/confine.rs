@@ -80,13 +80,13 @@ impl TraceProc {
 
     /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
     /// output policy enforcer format (ie seccomp, apparmor)
-    fn policy_config(mut self, policy: PathBuf, /*_enforcer: Option<Box<dyn Enforcer>>*/) -> Self {
-
-        // TODO: better error-checking
-        self.policy = match PolicyInterface::new_policy(policy) {
-            Ok(_policy) => Some(_policy),
-            Err(e) => None,
-        };
+    fn policy_config(mut self, _policy: Option<PathBuf>) -> Self {
+        if let Some(policy) = _policy {
+            self.policy = match PolicyInterface::new_policy(policy) {
+                Ok(_policy) => Some(_policy),
+                Err(_) => None,
+            };
+        }
         self
     }
 
@@ -101,7 +101,7 @@ impl TraceProc {
 
     /// `run_trace()` takes an initialized TraceProc with mode and execute a normal trace, and store to struct.
     /// Once traced, we can preemptively output the trace as well, in the case the user only wants a trace.
-    fn run_trace(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
+    fn run_trace(&mut self, args: Vec<String>, output: bool, gen_profile: bool) -> Result<(), Error> {
         let table = Some(self.mode.trace(args)?);
         if output {
             if !self.json {
@@ -112,28 +112,8 @@ impl TraceProc {
         }
         Ok(())
     }
-
-
-    /// `run_trace_policy()` does a normal `run_trace()`, but instead also enforces the set common
-    /// security policy on top of the running tracee, with the purpose of enabling policy testing while
-    /// in a trusted and secure environment.
-    fn run_trace_policy(&mut self, args: Vec<String>, output: bool) -> Result<(), Error> {
-        // TODO: check if policy_path is set
-        if let None = self.policy {
-            unimplemented!()
-        }
-
-        self.run_trace(args, output)?;
-        Ok(())
-    }
-
-
-    /// `generate_enforce_profile()` takes a parsed confine policy and generates a
-    /// profile for an enforcer module, and returns a path to write.
-    fn generate_enforce_profile(&self, output: PathBuf) -> () {
-        unimplemented!()
-    }
 }
+
 
 
 #[allow(unused_must_use)]
@@ -143,18 +123,26 @@ fn main() {
         .author("ex0dus-0x <ex0dus at codemuch.tech>")
         .arg(
             Arg::with_name("command")
-                .help("Command to analyze as child, including positional arguments.")
+                .help("Command to analyze as child, including positional arguments")
                 .raw(true)
                 .takes_value(true)
                 .required(true)
         )
         .arg(
             Arg::with_name("policy_path")
-                .help("Path to policy file to use for generation")
+                .help("Path to policy file to use for enforcement")
                 .short("p")
                 .long("policy")
                 .takes_value(true)
                 .value_name("POLICY_PATH")
+                .required(false)
+        )
+        .arg(
+            Arg::with_name("generate_profile")
+                .help("If policy if set, generate a profile from enforcer")
+                .short("g")
+                .long("generate")
+                .takes_value(false)
                 .required(false)
         )
         .arg(
@@ -211,29 +199,24 @@ fn main() {
     info!("Utilizing trace mode: {}", mode);
 
     // parse out policy generation options
-    let policy_path = matches.value_of("policy_path")
-        .map(|p| PathBuf::from(p)).unwrap();
+    let policy_path: Option<PathBuf> = matches.value_of("policy_path")
+        .map_or(None, |p| Some(PathBuf::from(p)));
     info!("Using input policy path: {:?}", policy_path);
 
     // initialize TraceProc interface
     info!("Starting up TraceProc instantiation");
     let mut proc = TraceProc::new()
-        .trace_handler(mode)
         .policy_config(policy_path)
+        .trace_handler(mode)
         .out_json(matches.is_present("json"));
 
+    // check for presence of flag to generate profile
+    // NOTE: this is ignored if no policy path is specified
+    let generate_profile: bool = matches.is_present("generate_profile");
+
     // run trace depending on arguments specified
-    if !matches.is_present("policy_path") {
-        info!("Executing a normal trace with process handler");
-        if let Err(e) = proc.run_trace(args, true) {
-            eprintln!("confine exception: {}", e);
-            eprintln!("{}", e.backtrace());
-        }
-    } else if matches.is_present("policy_path") {
-        info!("Executing a trace with a specified policy file");
-        if let Err(e) = proc.run_trace_policy(args, true) {
-            eprintln!("confine exception: {}", e);
-            eprintln!("{}", e.backtrace());
-        }
+    info!("Executing confined trace with process handler");
+    if let Err(e) = proc.run_trace(args, true, generate_profile) {
+        eprintln!("confine exception: {} {}", e, e.backtrace());
     }
 }
