@@ -81,11 +81,9 @@ impl TraceProc {
     /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
     /// output policy enforcer format (ie seccomp, apparmor)
     fn policy_config(mut self, policy: PathBuf, /*_enforcer: Option<Box<dyn Enforcer>>*/) -> Self {
-
-        // TODO: better error-checking
         self.policy = match PolicyInterface::new_policy(policy) {
             Ok(_policy) => Some(_policy),
-            Err(e) => None,
+            Err(_) => None,
         };
         self
     }

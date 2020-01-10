@@ -8,7 +8,6 @@ use std::io::Read;
 use std::fs::File;
 use std::boxed::Box;
 use std::error::Error;
-use std::convert::From;
 use std::path::PathBuf;
 use std::collections::HashMap;
 
@@ -72,7 +71,7 @@ struct Rule {
 #[derive(Deserialize, Debug, Clone)]
 struct Policy {
     manifest: Manifest,
-    rules: Option<Vec<Rule>>
+    pub rules: Option<Vec<Rule>>
 }
 
 

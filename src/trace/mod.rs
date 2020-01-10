@@ -12,7 +12,7 @@ use unshare::Namespace;
 use bcc::core::BPF;
 use bcc::perf;
 
-use crate::syscall::SyscallManager;
+use crate::syscall::{SyscallError, SyscallManager};
 
 use failure::Error as FailError;
 use std::io::Error as IOError;
@@ -24,6 +24,9 @@ use self::ptrace::consts::{options, regs};
 
 #[derive(Debug, Fail)]
 pub enum TraceError {
+
+    #[fail(display = "Could not interact with syscall manager.")]
+    ManagerError(SyscallError),
 
     #[fail(display = "Could not spawn child tracee process. Reason: {}", reason)]
     SpawnError { reason: String },
@@ -73,7 +76,7 @@ impl ProcessHandler for Ebpf {
         // TODO: generate source per syscall
 
         // initialize new BPF module
-        let mut module = BPF::new(code).map_err(|e| {
+        let mut module: BPF = BPF::new(code).map_err(|e| {
             TraceError::BPFError { reason: e }
         })?;
 
@@ -238,7 +241,7 @@ impl Ptrace {
         }
 
         // add syscall to manager
-        self.manager.add_syscall(syscall_num, args);
+        self.manager.add_syscall(syscall_num, args).map_err(TraceError::ManagerError)?;
 
         info!("ptrace-ing with PTRACE_SYSCALL to SYS_EXIT");
         helpers::syscall(self.pid)
@@ -253,8 +256,7 @@ impl Ptrace {
     }
 
 
-    /// `wait()` wrapper to waitpid/wait4, with error-checking in order
-    /// to return proper type back to developer.
+    /// `wait()` wrapper to waitpid/wait4, with error-checking in order to return proper type back to developer.
     fn wait(&self) -> Option<c_int> {
         let mut status = 0;
         unsafe {
@@ -270,8 +272,7 @@ impl Ptrace {
     }
 
 
-    /// `get_arg()` is called to introspect current process
-    /// states register values in order to determine syscall
+    /// `get_arg()` is called to introspect current process states register values in order to determine syscall
     /// and arguments passed.
     fn get_arg(&mut self, reg: u8) -> Result<u64, TraceError> {
 
@@ -306,8 +307,7 @@ impl Ptrace {
     }
 
 
-    /// `read_arg()` uses ptrace with PEEKTEXT in order to read out
-    /// contents for a specified address.
+    /// `read_arg()` uses ptrace with PEEKTEXT in order to read out contents for a specified address.
     fn read_arg(&mut self, addr: u64) -> Result<u64, TraceError> {
         helpers::peek_text(self.pid, addr as i64)
             .map(|x| x as u64)
@@ -317,8 +317,7 @@ impl Ptrace {
     }
 
 
-    /// `get_syscall_num()` uses ptrace with PEEKUSER to return the
-    /// syscall num from ORIG_RAX.
+    /// `get_syscall_num()` uses ptrace with PEEKUSER to return the syscall num from ORIG_RAX.
     fn get_syscall_num(&mut self) -> Result<u64, TraceError> {
         helpers::peek_user(self.pid, regs::ORIG_RAX)
             .map(|x| x as u64)
