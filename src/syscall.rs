@@ -26,7 +26,7 @@ static SYSCALL_TABLE: &str = "/usr/include/i386-linux-gnu/asm/unistd_32.h";
 static SYSCALL_REGEX: &str = r"#define\s*__NR_(\w+)\s*(\d+)";
 
 // type alias for syscall table hashmap
-type SyscallTable = HashMap<u64, String>;
+pub type SyscallTable = HashMap<u64, String>;
 
 
 /// declares an action parsed by the userspace application and applied to
@@ -121,7 +121,7 @@ impl SyscallManager {
     /// `new()` initializes a manager with a parsed system call table,
     /// ready for storing syscalls.
     pub fn new() -> Self {
-        let syscall_table = SyscallManager::_parse_syscall_table().unwrap();
+        let syscall_table = SyscallManager::parse_syscall_table().unwrap();
         Self {
             syscalls: Vec::new(),
             syscall_table: syscall_table
@@ -129,11 +129,11 @@ impl SyscallManager {
     }
 
 
-    /// `_parse_syscall_table()` is a helper method that parses a "syscall table"
+    /// `parse_syscall_table()` is a helper method that parses a "syscall table"
     /// and instantiates a HashMap that stores the syscall num as a key and the name
     /// as the value.
     #[inline]
-    fn _parse_syscall_table() -> Result<SyscallTable, SyscallError> {
+    pub fn parse_syscall_table() -> Result<SyscallTable, SyscallError> {
 
         // read unistd.h for macro definitions
         let mut tbl_file = File::open(SYSCALL_TABLE).map_err(SyscallError::IOError)?;

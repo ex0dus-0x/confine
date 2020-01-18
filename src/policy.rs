@@ -13,13 +13,16 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::syscall::{Syscall, SyscallAction, SyscallGroup};
 use crate::enforcers::EnforcerType;
+use crate::syscall::{
+    Syscall, SyscallAction,
+    SyscallGroup, SyscallManager
+};
 
 
 // a type alias for a hashmap that provides a one-to-one mapping between syscall IDs and
 // action to perform.
-type PolicyMap = HashMap<u64, SyscallAction>;
+type PolicyMap = HashMap<SyscallType, SyscallAction>;
 
 
 /// a `Manifest` is a required header per confine config. It is used
@@ -43,7 +46,7 @@ struct Manifest {
 
 /// `SyscallType` implements the variants a user input for a syscall rule
 /// can be. It implements type conversion traits in order for serialization to
-/// convert to a valid type
+/// convert to a valid type (TODO)
 #[derive(Deserialize, Debug, Clone)]
 enum SyscallType {
     Syscall(Syscall),
@@ -55,10 +58,10 @@ enum SyscallType {
 /// a `Rule` is a eserializable wrapper around a syscall rule
 /// that eventually decomposes down to our policy map.
 #[derive(Deserialize, Debug, Clone)]
-struct Rule {
+pub struct Rule {
     name: Option<String>,
-    syscall: SyscallType,
-    rule: SyscallAction
+    pub syscall: SyscallType,
+    pub action: SyscallAction
 }
 
 
@@ -69,7 +72,7 @@ struct Rule {
 /// - one header manifest section
 /// - one or multiple rule sections
 #[derive(Deserialize, Debug, Clone)]
-struct Policy {
+pub struct Policy {
     manifest: Manifest,
     pub rules: Option<Vec<Rule>>
 }
@@ -92,7 +95,6 @@ impl Policy {
 /// policy actions to enforce, and an actual parsed policy
 #[derive(Debug, Clone)]
 pub struct PolicyInterface {
-    policy: Option<Policy>,
     policy_map: PolicyMap
 }
 
@@ -103,17 +105,38 @@ impl PolicyInterface {
     /// a deserializable Policy for enforcer interaction.
     pub fn new_policy(path: PathBuf) -> io::Result<Self> {
         let policy = Policy::from_file(path).unwrap();
-        let policy_map = Self::gen_policy_map();
-
         Ok(Self {
-            policy: Some(policy),
-            policy_map: policy_map
+            policy_map: Self::gen_policy_map(policy)
         })
     }
 
     /// `gen_policy_map` is a helper that takes a parsed `Policy` and creates a
     /// HashMap mapping id values to enforced rules
-    fn gen_policy_map() -> PolicyMap {
-        unimplemented!();
+    fn gen_policy_map(policy: Policy) -> PolicyMap {
+        let map: PolicyMap = PolicyMap::new();
+        let rules: Option<Vec<Rule>> = policy.rules;
+
+        // initialize a temporary syscall table for conversion reference
+        // TODO: refactor to make this unnecessary
+        let table = SyscallManager::parse_syscall_table().unwrap();
+
+        if let None = policy.rules {
+            return map;
+        } else if let Some(rules) = policy.rules {
+            let _ = rules.iter().map(|rule| {
+                match rule.syscall {
+                    SyscallType::Syscall(s) => {
+                        map.insert({
+
+                        }, rule.action);
+                    },
+                    SyscallType::Group(g) => {
+                        //map.insert(g, rule.action);
+                        unimplemented!();
+                    }
+                }
+            });
+        }
+        map
     }
 }
