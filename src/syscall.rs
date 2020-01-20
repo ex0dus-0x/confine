@@ -74,8 +74,8 @@ impl Default for SyscallGroup {
 /// with serde_json.
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Syscall {
-    number: u64,
-    name: String,
+    pub number: u64,
+    pub name: String,
     args: Vec<u64>,
 
     #[serde(skip)]

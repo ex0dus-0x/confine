@@ -1,11 +1,10 @@
 # confine
 
-Security-focused process tracer with policy handling capabilities
+Security-focused firewall with policy handling capabilities
 
 ## Introduction
 
-__confine__ is a security-focused process tracer that supports generating policies for Linux security _enforcers_. Enforcers are defined as
-execution runtimes supported by the operating system that take a profile and conduct host-based policy enforcement, such as seccomp.
+__confine__ is a security-focused syscall-based firewall  that supports generating policies for Linux security _enforcers_. Enforcers are defined as execution runtimes supported by the operating system that take a profile and conduct host-based policy enforcement, such as seccomp.
 
 While Linux supports a lot of these well-documented security enforcers over the lifespan of the operating system, many of them have given up usability for the
 ability to support fine-grained configurability, making them increasingly complex to write. __confine__ enables security and devops engineers to not only generate enforcer profiles
@@ -17,8 +16,8 @@ a user to improve security with intrusion detection and monitoring, but also fil
 * Fast system call tracing with either `ptrace` or EBPF mode (_WIP_)
   * Supports syscall trace serialization to JSON
   * Isolated process tracing with Linux namespaces and capabilities
-* Policy generation for multiple enforcer backends
-  * Supports seccomp ...
+* Policy generation for enforcer backends
+  * Currently supports Docker seccomp profile generation
 
 ## Usage
 

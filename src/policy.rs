@@ -22,7 +22,7 @@ use crate::syscall::{
 
 // a type alias for a hashmap that provides a one-to-one mapping between syscall IDs and
 // action to perform.
-type PolicyMap = HashMap<SyscallType, SyscallAction>;
+type PolicyMap = HashMap<u64, SyscallAction>;
 
 
 /// a `Manifest` is a required header per confine config. It is used
@@ -48,7 +48,7 @@ struct Manifest {
 /// can be. It implements type conversion traits in order for serialization to
 /// convert to a valid type (TODO)
 #[derive(Deserialize, Debug, Clone)]
-enum SyscallType {
+pub enum SyscallType {
     Syscall(Syscall),
     Group(SyscallGroup),
     // .. TODO: other ways to identify syscalls
@@ -113,8 +113,7 @@ impl PolicyInterface {
     /// `gen_policy_map` is a helper that takes a parsed `Policy` and creates a
     /// HashMap mapping id values to enforced rules
     fn gen_policy_map(policy: Policy) -> PolicyMap {
-        let map: PolicyMap = PolicyMap::new();
-        let rules: Option<Vec<Rule>> = policy.rules;
+        let mut map: PolicyMap = PolicyMap::new();
 
         // initialize a temporary syscall table for conversion reference
         // TODO: refactor to make this unnecessary
@@ -122,15 +121,20 @@ impl PolicyInterface {
 
         if let None = policy.rules {
             return map;
-        } else if let Some(rules) = policy.rules {
-            let _ = rules.iter().map(|rule| {
-                match rule.syscall {
+
+        } else if let Some(_rules) = policy.rules {
+            let _ = _rules.iter().map(|rule| {
+                match &rule.syscall {
                     SyscallType::Syscall(s) => {
                         map.insert({
-
-                        }, rule.action);
+                            if let Some(e) = table.iter().find(|(k,v)| { v == &&s.name }) {
+                                *e.0
+                            } else {
+                                panic!("Cannot find syscall");
+                            }
+                        }, rule.action.clone());
                     },
-                    SyscallType::Group(g) => {
+                    SyscallType::Group(_g) => {
                         //map.insert(g, rule.action);
                         unimplemented!();
                     }

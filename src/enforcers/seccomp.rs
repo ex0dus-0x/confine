@@ -1,13 +1,33 @@
 //! seccomp.rs
 //!
-//!
+//!     Defines the Docker seccomp enforcer module. Implements the custom
+//!     enforcer trait in order to convert and export common policies.
 
 use std::enforcers::Enforcer;
 
 
-//! `Seccomp` structure that encapsulates the
-//!
-pub struct Seccomp;
+/// `Seccomp` interface that encapsulates the file structure for a
+/// JSON-based seccomp policy for Docker.
+#[derive(Serialize)]
+pub struct Seccomp {
+    default_action: String,
+    syscalls: Vec<SeccompSyscall>
+}
+
+
+struct SeccompSyscall {
+    names: Vec<String>,
+    action: String,
+    args: Vec<String>,
+    comment: String,
+}
+
+struct SeccompArg {
+    index: i32,
+    value: u64,
+    valueTwo: i32,
+    op: String
+}
 
 
 impl Enforcer for Seccomp {
