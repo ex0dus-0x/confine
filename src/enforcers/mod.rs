@@ -11,6 +11,7 @@ use crate::policy::PolicyInterface;
 /// configuration matching after deserialization.
 #[derive(Deserialize, Debug, Clone)]
 pub enum EnforcerType {
+    Default,
     Seccomp,
     AppArmor,
     Unsupported(String)

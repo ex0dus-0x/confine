@@ -28,19 +28,12 @@ type PolicyMap = HashMap<u64, SyscallAction>;
 /// a `Manifest` is a required header per confine config. It is used
 /// to hold identifying information regarding the trace to be carried out,
 /// both basic configs and for rule enforcement.
+/// TODO: define more advanced configuration
 #[derive(Deserialize, Debug, Clone)]
 struct Manifest {
 
-    // name of task, job, identifier, etc.
-    #[serde(alias = "name")]
-    job_name: String,
-
-    // represents entirety of command (plus args) to trace
-    #[serde(alias = "command")]
-    cmd_args: Vec<String>,
-
-    // represents the enforcer to generate policy for
-    enforcer: Option<EnforcerType>
+    // represents the stringified enforcer to generate policy for
+    enforcer: Option<String>
 }
 
 
@@ -59,7 +52,7 @@ pub enum SyscallType {
 /// that eventually decomposes down to our policy map.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Rule {
-    name: Option<String>,
+    pub name: Option<String>,
     pub syscall: SyscallType,
     pub action: SyscallAction
 }
@@ -80,14 +73,19 @@ pub struct Policy {
 
 impl Policy {
 
-    /// `from_file()` initializes a deserialized Policy struct
-    /// from a configuration file
+    /// `from_file()` initializes a deserialized Policy struct from a configuration file
     fn from_file(path: PathBuf) -> Result<Self, Box<dyn Error>> {
         let mut contents = String::new();
         let mut file = File::open(&path)?;
         file.read_to_string(&mut contents)?;
         serde_yaml::from_str(&contents).map_err(|e| e.into())
     }
+
+    pub fn get_enforcer(&self) -> EnforcerType {
+        match self.manifest.
+
+    }
+
 }
 
 
@@ -95,6 +93,7 @@ impl Policy {
 /// policy actions to enforce, and an actual parsed policy
 #[derive(Debug, Clone)]
 pub struct PolicyInterface {
+    enforcer: Option<EnforcerType>,
     policy_map: PolicyMap
 }
 
@@ -105,10 +104,15 @@ impl PolicyInterface {
     /// a deserializable Policy for enforcer interaction.
     pub fn new_policy(path: PathBuf) -> io::Result<Self> {
         let policy = Policy::from_file(path).unwrap();
+
+        let enforcer_type = match policy.manfiest.
+
         Ok(Self {
+            enforcer:
             policy_map: Self::gen_policy_map(policy)
         })
     }
+
 
     /// `gen_policy_map` is a helper that takes a parsed `Policy` and creates a
     /// HashMap mapping id values to enforced rules
@@ -121,13 +125,14 @@ impl PolicyInterface {
 
         if let None = policy.rules {
             return map;
+        }
 
-        } else if let Some(_rules) = policy.rules {
+        else if let Some(_rules) = policy.rules {
             let _ = _rules.iter().map(|rule| {
                 match &rule.syscall {
                     SyscallType::Syscall(s) => {
                         map.insert({
-                            if let Some(e) = table.iter().find(|(k,v)| { v == &&s.name }) {
+                            if let Some(e) = table.iter().find(|(_,v)| { v == &&s.name }) {
                                 *e.0
                             } else {
                                 panic!("Cannot find syscall");

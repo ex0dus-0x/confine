@@ -214,7 +214,7 @@ pub mod helpers {
     pub fn get_regs(pid: Pid) -> Result<libc::user_regs_struct> {
         unsafe {
             // initialize uninitialized memory for register struct
-            let regs: libc::user_regs_struct = mem::uninitialized();
+            let regs: libc::user_regs_struct = mem::MaybeUninit::zeroed().assume_init();
 
             // cast user_regs_struct to c_void using mem::transmute_copy
             match ptrace::exec_ptrace(consts::requests::PTRACE_GETREGS, pid, NULL, mem::transmute_copy::<libc::user_regs_struct,

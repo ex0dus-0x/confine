@@ -48,7 +48,14 @@ pub enum TraceError {
 /// trait that handles support for extending tracing support
 /// for various modes. Wraps around our tracing mode of operations.
 pub trait ProcessHandler {
+
+    // initializes a new interface that implements the ProcessHandler trait
     fn new() -> Self where Self: Sized;
+
+    // handle calls with the appropriate trace method based on rules implemented
+    //fn handle_rules() -> Result<(), TraceError>
+
+    // runs the appropriate trace method with arguments to the program
     fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError>;
 }
 
@@ -153,6 +160,9 @@ impl ProcessHandler for Ptrace {
     fn new() -> Self {
         Self { pid: 0, manager: SyscallManager::new() }
     }
+
+    // TODO: implement `handle_rules()` to block system calls (or report them)
+
 
     /// `trace()` functionality for ptrace mode. Forks a child process, and uses parent to
     /// to step through syscall events.
