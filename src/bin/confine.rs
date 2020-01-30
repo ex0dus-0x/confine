@@ -132,7 +132,7 @@ fn main() {
                 .help("Command to analyze as child, including positional arguments")
                 .raw(true)
                 .takes_value(true)
-                .required(false)
+                .required(true)
         )
         .arg(
             Arg::with_name("policy_path")
@@ -204,16 +204,10 @@ fn main() {
     let mode = matches.value_of("trace_mode").unwrap();
     info!("Utilizing trace mode: {}", mode);
 
-    // parse out policy generation options
-    let policy_path = matches.value_of("policy_path")
-        .map(|p| PathBuf::from(p)).unwrap();
-    info!("Using input policy path: {:?}", policy_path);
-
     // initialize TraceProc interface
     info!("Starting up TraceProc instantiation");
     let mut proc = TraceProc::new()
         .trace_handler(mode)
-        .policy_config(policy_path)
         .out_json(matches.is_present("json"));
 
     // run trace depending on arguments specified
@@ -227,11 +221,19 @@ fn main() {
 
     // run trace with a policy enforced. If option is set, also generate a profile
     else if matches.is_present("policy_path") {
-        info!("Executing a trace with a specified policy file");
+
+        // parse out policy generation options
+        let policy_path = matches.value_of("policy_path")
+            .map(|p| PathBuf::from(p)).unwrap();
+        info!("Using input policy path: {:?}", policy_path);
+
+        // build up with common policy
+        proc.policy_config(policy_path);
 
         // also check for presence of flag to generate profile
         let generate_profile = matches.is_present("generate_profile");
 
+        info!("Executing a trace with a specified policy file");
         if let Err(e) = proc.run_trace_policy(args, generate_profile) {
             eprintln!("confine exception: {}", e);
             eprintln!("{}", e.backtrace());

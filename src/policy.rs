@@ -73,7 +73,7 @@ pub struct Policy {
 
 impl Policy {
 
-    /// `from_file()` initializes a deserialized Policy struct from a configuration file
+    /// `from_file()` initializes a deserialized Policy struct from a configuration file.
     fn from_file(path: PathBuf) -> Result<Self, Box<dyn Error>> {
         let mut contents = String::new();
         let mut file = File::open(&path)?;
@@ -81,9 +81,20 @@ impl Policy {
         serde_yaml::from_str(&contents).map_err(|e| e.into())
     }
 
-    pub fn get_enforcer(&self) -> EnforcerType {
-        match self.manifest.
 
+    /// `get_enforcer()` returns an EnforcerType from a string serialized from the configuration
+    /// manifest. If none is provided or isn't recognized, no enforcer will be used to generate a profile.
+    pub fn get_enforcer(&self) -> EnforcerType {
+        match &self.manifest.enforcer {
+            Some(name) => {
+                match name.as_str() {
+                    "seccomp"   => EnforcerType::Seccomp,
+                    "apparmor"  => EnforcerType::AppArmor,
+                    _           => EnforcerType::Default
+                }
+            }
+            None => EnforcerType::Default
+        }
     }
 
 }
@@ -93,7 +104,7 @@ impl Policy {
 /// policy actions to enforce, and an actual parsed policy
 #[derive(Debug, Clone)]
 pub struct PolicyInterface {
-    enforcer: Option<EnforcerType>,
+    enforcer: EnforcerType,
     policy_map: PolicyMap
 }
 
@@ -104,11 +115,8 @@ impl PolicyInterface {
     /// a deserializable Policy for enforcer interaction.
     pub fn new_policy(path: PathBuf) -> io::Result<Self> {
         let policy = Policy::from_file(path).unwrap();
-
-        let enforcer_type = match policy.manfiest.
-
         Ok(Self {
-            enforcer:
+            enforcer: policy.get_enforcer(),
             policy_map: Self::gen_policy_map(policy)
         })
     }
