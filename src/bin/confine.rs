@@ -80,11 +80,13 @@ impl TraceProc {
 
     /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
     /// output policy enforcer format (ie seccomp, apparmor)
-    fn policy_config(mut self, policy: PathBuf) -> Self {
-        self.policy = match PolicyInterface::new_policy(policy) {
-            Ok(_policy) => Some(_policy),
-            Err(_) => None,
-        };
+    fn policy_config(mut self, _policy: Option<PathBuf>) -> Self {
+        if let Some(policy) = _policy {
+            self.policy = match PolicyInterface::new_policy(policy) {
+                Ok(_policy) => Some(_policy),
+                Err(_) => None,
+            };
+        }
         self
     }
 
@@ -204,11 +206,18 @@ fn main() {
     let mode = matches.value_of("trace_mode").unwrap();
     info!("Utilizing trace mode: {}", mode);
 
+    // parse out policy generation options
+    let policy_path: Option<PathBuf> = matches.value_of("policy_path")
+        .map_or(None, |p| Some(PathBuf::from(p)));
+    info!("Using input policy path: {:?}", policy_path);
+
     // initialize TraceProc interface
     info!("Starting up TraceProc instantiation");
     let mut proc = TraceProc::new()
+        .policy_config(policy_path)
         .trace_handler(mode)
         .out_json(matches.is_present("json"));
+
 
     // run trace depending on arguments specified
     if !matches.is_present("policy_path") {
@@ -221,14 +230,6 @@ fn main() {
 
     // run trace with a policy enforced. If option is set, also generate a profile
     else if matches.is_present("policy_path") {
-
-        // parse out policy generation options
-        let policy_path = matches.value_of("policy_path")
-            .map(|p| PathBuf::from(p)).unwrap();
-        info!("Using input policy path: {:?}", policy_path);
-
-        // build up with common policy
-        proc.policy_config(policy_path);
 
         // also check for presence of flag to generate profile
         let generate_profile = matches.is_present("generate_profile");
