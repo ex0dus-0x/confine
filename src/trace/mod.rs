@@ -162,6 +162,7 @@ impl ProcessHandler for Ptrace {
     }
 
     // TODO: implement `handle_rules()` to block system calls (or report them)
+    //fn handle_rules(&mut self, rule_map)
 
 
     /// `trace()` functionality for ptrace mode. Forks a child process, and uses parent to
@@ -174,7 +175,8 @@ impl ProcessHandler for Ptrace {
         }
 
         // initialize with unshared namespaces for container-like environment
-        let namespaces = vec![Namespace::Pid, Namespace::User, Namespace::Cgroup];
+        // TODO: configurability by flag
+        let namespaces = vec![Namespace::User, Namespace::Cgroup];
         cmd.unshare(&namespaces);
 
         // call traceme helper to signal parent for tracing
