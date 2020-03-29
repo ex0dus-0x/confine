@@ -10,18 +10,20 @@
 
 extern crate regex;
 
-extern crate libc;
 extern crate bcc;
+extern crate libc;
 extern crate unshare;
 
 extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
 
-#[macro_use] extern crate log;
-#[macro_use] extern crate failure;
-#[macro_use] extern crate lazy_static;
-
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate failure;
+#[macro_use]
+extern crate lazy_static;
 
 /// logger used in both CLI and library modules for verbose debugging support.
 pub mod logger;

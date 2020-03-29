@@ -3,32 +3,27 @@
 //!     CLI interface for confine library modules. Implements tracing under two
 //!     different modes, and provides deserialization support to serializable formats.
 
-#[cfg(all(target_os = "linux",
-          any(target_arch = "x86",
-              target_arch = "x86_64")),
-)]
-
+#[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
 extern crate clap;
-extern crate failure;
 extern crate confine;
+extern crate failure;
 
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 use std::boxed::Box;
 use std::path::PathBuf;
 
 use clap::{App, Arg};
-use log::LevelFilter;
 use failure::Error;
+use log::LevelFilter;
 
+use confine::enforcers::Enforcer;
 use confine::logger::TraceLogger;
 use confine::policy::PolicyInterface;
-use confine::enforcers::Enforcer;
-use confine::trace::{ProcessHandler, Ptrace, Ebpf};
-
+use confine::trace::{Ebpf, ProcessHandler, Ptrace};
 
 static LOGGER: TraceLogger = TraceLogger;
-
 
 /// `TraceProc` provides a builder interface for initializing and interacting with a specified PID. It implements
 /// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
@@ -43,20 +38,17 @@ impl Default for TraceProc {
         Self {
             mode: Box::new(Ptrace::new()),
             json: false,
-            policy: None
+            policy: None,
         }
     }
 }
 
-
 impl TraceProc {
-
     /// `new()` initializes a new TraceProc interface with default attributes. Expects developer to build up struct
     /// with following builder methods.
     fn new() -> Self {
         Self::default()
     }
-
 
     /// `_parse_handler()` is a factory-like helper method that returns a trait object that represents the instance
     /// of a struct that satisfies the ProcessHandler trait bound.
@@ -65,10 +57,9 @@ impl TraceProc {
         match handler_str {
             "ptrace" => Box::new(Ptrace::new()),
             "ebpf" => Box::new(Ebpf::new()),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
-
 
     /// `trace_handler()` builds up TraceProc by parsing a user-specified handler input and instantiating the appropriate
     /// one that implements the ProcessHandler trait bound.
@@ -76,7 +67,6 @@ impl TraceProc {
         self.mode = Self::_parse_handler(handler_str);
         self
     }
-
 
     /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
     /// output policy enforcer format (ie seccomp, apparmor)
@@ -90,7 +80,6 @@ impl TraceProc {
         self
     }
 
-
     /// `out_json()` builds up and configures TraceProc to output json after trace.
     /// TODO: should be enhanced in order to consume various serde-compatible file formats.
     fn out_json(mut self, json: bool) -> Self {
@@ -98,10 +87,14 @@ impl TraceProc {
         self
     }
 
-
     /// `run_trace()` takes an initialized TraceProc with mode and execute a normal trace, and store to struct.
     /// Once traced, we can preemptively output the trace as well, in the case the user only wants a trace.
-    fn run_trace(&mut self, args: Vec<String>, output: bool, gen_profile: bool) -> Result<(), Error> {
+    fn run_trace(
+        &mut self,
+        args: Vec<String>,
+        output: bool,
+        gen_profile: bool,
+    ) -> Result<(), Error> {
         let table = Some(self.mode.trace(args)?);
         if output {
             if !self.json {
@@ -114,8 +107,6 @@ impl TraceProc {
     }
 }
 
-
-
 #[allow(unused_must_use)]
 fn main() {
     let matches = App::new("confine")
@@ -126,7 +117,7 @@ fn main() {
                 .help("Command to analyze as child, including positional arguments")
                 .raw(true)
                 .takes_value(true)
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("policy_path")
@@ -135,7 +126,7 @@ fn main() {
                 .long("policy")
                 .takes_value(true)
                 .value_name("POLICY_PATH")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::with_name("generate_profile")
@@ -143,7 +134,7 @@ fn main() {
                 .short("g")
                 .long("generate")
                 .takes_value(false)
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::with_name("trace_mode")
@@ -154,7 +145,7 @@ fn main() {
                 .default_value("ptrace")
                 .takes_value(true)
                 .value_name("TRACE_MODE")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::with_name("json")
@@ -162,34 +153,31 @@ fn main() {
                 .short("j")
                 .long("json")
                 .takes_value(false)
-                .required(false)
+                .required(false),
         )
-       .arg(
+        .arg(
             Arg::with_name("verbosity")
                 .help("Sets verbosity for program logging output.")
                 .short("v")
                 .long("verbosity")
                 .multiple(true)
                 .takes_value(false)
-                .required(false)
+                .required(false),
         )
         .get_matches();
 
-
     // initialize logger with basic logging levels
     let level_filter = match matches.occurrences_of("verbosity") {
-        2       => LevelFilter::Debug,
-        1       => LevelFilter::Info,
-        0 | _   => LevelFilter::Off,
+        2 => LevelFilter::Debug,
+        1 => LevelFilter::Info,
+        0 | _ => LevelFilter::Off,
     };
     log::set_logger(&LOGGER).expect("unable to initialize logger");
     log::set_max_level(level_filter);
     info!("Initialized logger");
 
     // collect args into vec and convert to String for lifetime
-    let _args: Vec<&str> = matches.values_of("command")
-                          .unwrap()
-                          .collect::<Vec<&str>>();
+    let _args: Vec<&str> = matches.values_of("command").unwrap().collect::<Vec<&str>>();
     let args: Vec<String> = _args.iter().map(|s| s.to_string()).collect();
 
     debug!("Command and arguments: {:?}", args);
@@ -199,7 +187,8 @@ fn main() {
     info!("Utilizing trace mode: {}", mode);
 
     // parse out policy generation options
-    let policy_path: Option<PathBuf> = matches.value_of("policy_path")
+    let policy_path: Option<PathBuf> = matches
+        .value_of("policy_path")
         .map_or(None, |p| Some(PathBuf::from(p)));
     info!("Using input policy path: {:?}", policy_path);
 

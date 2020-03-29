@@ -4,7 +4,7 @@
 //!     Provides several interfaces and wrappers to the `trace` submodule
 //!     in order to allow convenient tracing.
 
-use libc::{pid_t, c_int};
+use libc::{c_int, pid_t};
 
 use unshare::Command;
 use unshare::Namespace;
@@ -18,20 +18,21 @@ use failure::Error as FailError;
 use std::io::Error as IOError;
 
 pub mod ptrace;
-use self::ptrace::helpers;
 use self::ptrace::consts::{options, regs};
-
+use self::ptrace::helpers;
 
 #[derive(Debug, Fail)]
 pub enum TraceError {
-
     #[fail(display = "Could not interact with syscall manager.")]
     ManagerError(SyscallError),
 
     #[fail(display = "Could not spawn child tracee process. Reason: {}", reason)]
     SpawnError { reason: String },
 
-    #[fail(display = "Could not step through child PID {}. Reason: {}", pid, reason)]
+    #[fail(
+        display = "Could not step through child PID {}. Reason: {}",
+        pid, reason
+    )]
     StepError { pid: pid_t, reason: String },
 
     #[fail(display = "PTRACE_{} failed with error `{}`", call, reason)]
@@ -40,17 +41,23 @@ pub enum TraceError {
     #[fail(display = "Could not initialize BPF source. Reason: {}", reason)]
     BPFError { reason: FailError },
 
-    #[fail(display = "Could not attach kprobe to tracepoint {}. Reason: {}", tracepoint, reason)]
-    ProbeError { tracepoint: &'static str, reason: FailError },
+    #[fail(
+        display = "Could not attach kprobe to tracepoint {}. Reason: {}",
+        tracepoint, reason
+    )]
+    ProbeError {
+        tracepoint: &'static str,
+        reason: FailError,
+    },
 }
-
 
 /// trait that handles support for extending tracing support
 /// for various modes. Wraps around our tracing mode of operations.
 pub trait ProcessHandler {
-
     // initializes a new interface that implements the ProcessHandler trait
-    fn new() -> Self where Self: Sized;
+    fn new() -> Self
+    where
+        Self: Sized;
 
     // handle calls with the appropriate trace method based on rules implemented
     //fn handle_rules() -> Result<(), TraceError>
@@ -59,43 +66,40 @@ pub trait ProcessHandler {
     fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError>;
 }
 
-
 /// wrapper interface for ebpf tracing. Contains methods for dynamic ebpf code generation
 /// for rust bcc bindings, and attaching hooks to read and parse syscall events.
 pub struct Ebpf {
-    manager: SyscallManager
+    manager: SyscallManager,
 }
 
 impl ProcessHandler for Ebpf {
-
     fn new() -> Self {
-        Self { manager: SyscallManager::new() }
+        Self {
+            manager: SyscallManager::new(),
+        }
     }
-
 
     /// the `trace()` implementation for eBPF first instantiates from a source template,
     /// and attaches a callback that reads syscall events from a perf map that parsed out
     /// various components of a system call.
     fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
-
         let code = include_str!("ebpf/template.c");
 
         // TODO: generate source per syscall
 
         // initialize new BPF module
-        let mut module: BPF = BPF::new(code).map_err(|e| {
-            TraceError::BPFError { reason: e }
-        })?;
-
+        let mut module: BPF = BPF::new(code).map_err(|e| TraceError::BPFError { reason: e })?;
 
         // attach kprobe and kretprobe on system calls
         for (_, syscall) in self.manager.syscall_table.iter() {
-
             // initialize a kprobe at the event of entering a syscall
             let entry_probe = match module.load_kprobe("trace_entry") {
                 Ok(probe) => probe,
                 Err(e) => {
-                    return Err(TraceError::ProbeError { tracepoint: "trace_entry", reason: e });
+                    return Err(TraceError::ProbeError {
+                        tracepoint: "trace_entry",
+                        reason: e,
+                    });
                 }
             };
 
@@ -103,7 +107,10 @@ impl ProcessHandler for Ebpf {
             let ret_probe = match module.load_kprobe("trace_return") {
                 Ok(probe) => probe,
                 Err(e) => {
-                    return Err(TraceError::ProbeError { tracepoint: "trace_return", reason: e });
+                    return Err(TraceError::ProbeError {
+                        tracepoint: "trace_return",
+                        reason: e,
+                    });
                 }
             };
 
@@ -119,9 +126,8 @@ impl ProcessHandler for Ebpf {
         }
 
         let table = module.table("events");
-        let mut perf_map = perf::init_perf_map(table, Ebpf::perf_callback).map_err(|e| {
-            TraceError::BPFError { reason: e }
-        })?;
+        let mut perf_map = perf::init_perf_map(table, Ebpf::perf_callback)
+            .map_err(|e| TraceError::BPFError { reason: e })?;
 
         // TODO: break after a duration of execution, otherwise function doesn't return
         loop {
@@ -132,43 +138,37 @@ impl ProcessHandler for Ebpf {
     }
 }
 
-
 impl Ebpf {
-
     /// `perf_callback` is a callback routine invoked by bcc when encountering syscall events. Reads and parses
     /// a structure that encapsulates a system call, and outputs accordingly to a syscall manager.
     /// TODO
     #[inline]
     fn perf_callback() -> Box<FnMut(&[u8]) + Send> {
-        Box::new(|_| {
-
-        })
+        Box::new(|_| {})
     }
 }
-
 
 /// wrapper interface for ptrace tracing. Enforces various methods around important
 /// syscalls and libc calls that allows convenient tracer/tracee process interactions.
 pub struct Ptrace {
     pid: pid_t,
-    manager: SyscallManager
+    manager: SyscallManager,
 }
 
-
 impl ProcessHandler for Ptrace {
-
     fn new() -> Self {
-        Self { pid: 0, manager: SyscallManager::new() }
+        Self {
+            pid: 0,
+            manager: SyscallManager::new(),
+        }
     }
 
     // TODO: implement `handle_rules()` to block system calls (or report them)
     //fn handle_rules(&mut self, rule_map)
 
-
     /// `trace()` functionality for ptrace mode. Forks a child process, and uses parent to
     /// to step through syscall events.
     fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
-
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().next() {
             cmd.arg(arg);
@@ -187,7 +187,9 @@ impl ProcessHandler for Ptrace {
         let child = match cmd.spawn() {
             Ok(handler) => handler,
             Err(e) => {
-                return Err(TraceError::SpawnError { reason: e.to_string() });
+                return Err(TraceError::SpawnError {
+                    reason: e.to_string(),
+                });
             }
         };
 
@@ -196,11 +198,12 @@ impl ProcessHandler for Ptrace {
         debug!("Child PID: {}", self.pid);
 
         info!("Setting trace options with PTRACE_SETOPTIONS");
-        helpers::set_options(self.pid, options::PTRACE_O_TRACESYSGOOD as usize)
-            .map_err(|e| TraceError::PtraceError {
-                call: "SETOPTIONS", reason: e
-            })?;
-
+        helpers::set_options(self.pid, options::PTRACE_O_TRACESYSGOOD as usize).map_err(|e| {
+            TraceError::PtraceError {
+                call: "SETOPTIONS",
+                reason: e,
+            }
+        })?;
 
         // execute loop that examines through syscalls
         info!("Executing parent with tracing");
@@ -212,29 +215,29 @@ impl ProcessHandler for Ptrace {
                     } else {
                         debug!("Status reported: {:?}", status);
                     }
-                },
-                Ok(None) => {},
+                }
+                Ok(None) => {}
                 Err(e) => {
-                    return Err(TraceError::StepError { pid: self.pid, reason: e.to_string() });
-                },
+                    return Err(TraceError::StepError {
+                        pid: self.pid,
+                        reason: e.to_string(),
+                    });
+                }
             }
         }
         Ok(self.manager.clone())
-     }
+    }
 }
 
-
 impl Ptrace {
-
     /// `step()` defines the main instrospection performed ontop of the traced process, using
     /// ptrace to parse out syscall registers for output.
     fn step(&mut self) -> Result<Option<c_int>, TraceError> {
-
         info!("ptrace-ing with PTRACE_SYSCALL to SYS_ENTER");
-        helpers::syscall(self.pid)
-            .map_err(|e| TraceError::PtraceError {
-                call: "SYSCALL", reason: e
-            })?;
+        helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
+            call: "SYSCALL",
+            reason: e,
+        })?;
 
         if let Some(status) = self.wait() {
             return Ok(Some(status));
@@ -255,20 +258,21 @@ impl Ptrace {
         }
 
         // add syscall to manager
-        self.manager.add_syscall(syscall_num, args).map_err(TraceError::ManagerError)?;
+        self.manager
+            .add_syscall(syscall_num, args)
+            .map_err(TraceError::ManagerError)?;
 
         info!("ptrace-ing with PTRACE_SYSCALL to SYS_EXIT");
-        helpers::syscall(self.pid)
-            .map_err(|e| TraceError::PtraceError {
-                call: "SYSCALL", reason: e
-            })?;
+        helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
+            call: "SYSCALL",
+            reason: e,
+        })?;
 
         if let Some(status) = self.wait() {
             return Ok(Some(status));
         }
         Ok(None)
     }
-
 
     /// `wait()` wrapper to waitpid/wait4, with error-checking in order to return proper type back to developer.
     fn wait(&self) -> Option<c_int> {
@@ -285,11 +289,9 @@ impl Ptrace {
         }
     }
 
-
     /// `get_arg()` is called to introspect current process states register values in order to determine syscall
     /// and arguments passed.
     fn get_arg(&mut self, reg: u8) -> Result<u64, TraceError> {
-
         #[cfg(target_arch = "x86_64")]
         let offset = if cfg!(target_arch = "x86_64") {
             match reg {
@@ -299,7 +301,7 @@ impl Ptrace {
                 3 => regs::RCX,
                 4 => regs::R8,
                 5 => regs::R9,
-                _ => panic!("Unmatched argument offset")
+                _ => panic!("Unmatched argument offset"),
             }
         } else {
             /* TODO: register values for 32bit registers
@@ -319,27 +321,28 @@ impl Ptrace {
         helpers::peek_user(self.pid, offset)
             .map(|x| x as u64)
             .map_err(|e| TraceError::PtraceError {
-                call: "PEEKUSER", reason: e
+                call: "PEEKUSER",
+                reason: e,
             })
     }
-
 
     /// `read_arg()` uses ptrace with PEEKTEXT in order to read out contents for a specified address.
     fn read_arg(&mut self, addr: u64) -> Result<u64, TraceError> {
         helpers::peek_text(self.pid, addr as usize)
             .map(|x| x as u64)
             .map_err(|e| TraceError::PtraceError {
-                call: "PEEKTEXT", reason: e
+                call: "PEEKTEXT",
+                reason: e,
             })
     }
-
 
     /// `get_syscall_num()` uses ptrace with PEEKUSER to return the syscall num from ORIG_RAX.
     fn get_syscall_num(&mut self) -> Result<u64, TraceError> {
         helpers::peek_user(self.pid, regs::ORIG_RAX)
             .map(|x| x as u64)
             .map_err(|e| TraceError::PtraceError {
-                call: "PEEKUSER", reason: e
+                call: "PEEKUSER",
+                reason: e,
             })
     }
 }
