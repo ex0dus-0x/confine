@@ -11,10 +11,13 @@ use std::enforcers::Enforcer;
 #[derive(Serialize)]
 pub struct Seccomp {
     default_action: String,
+    architectures: Vec<String>,
     syscalls: Vec<SeccompSyscall>
 }
 
 
+/// `SeccompSyscall` represents a rule that is enforced by the container
+/// for a specific system call.
 struct SeccompSyscall {
     names: Vec<String>,
     action: String,
@@ -22,23 +25,14 @@ struct SeccompSyscall {
     comment: String,
 }
 
-struct SeccompArg {
-    index: i32,
-    value: u64,
-    valueTwo: i32,
-    op: String
-}
-
 
 impl Enforcer for Seccomp {
     fn from_policy(policy: PolicyInterface) -> Self {
-
-
+        unimplemented!();
     }
 
 
     fn output_policy(&self) -> &'static str {
-
-
+        unimplemented!();
     }
 }
