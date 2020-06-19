@@ -1,9 +1,6 @@
-//! ptrace.rs
-//!
-//!     Currently, `nix` support for `ptrace(2)` on the most recent
-//!     version of the crate (as of working, 0.12.0) is deprecated.
-//!     This is a re-implementation of `ptrace(2)` that allows safer
-//!     usage through a specialized helper function.
+//! Currently, `nix` support for `ptrace(2)` on the most recent version of the crate
+//! (as of working, 0.12.0) is deprecated. This is a re-implementation of `ptrace(2)` that
+//! allows safer usage through a specialized helper function.
 
 pub mod consts {
 

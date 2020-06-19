@@ -1,6 +1,4 @@
-//! mod.rs
-//!
-//!     Implements trait method for enforcers to bound to in module.
+//! Implements trait method for enforcers to bound to in module.
 
 use serde::Deserialize;
 

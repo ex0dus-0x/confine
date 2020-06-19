@@ -1,9 +1,5 @@
-//! syscall.rs
-//!
-//!     Defines struct interface for system calls.
-//!
-//!     Implements a parser for unistd.h's syscall table
-//!     in order to generate system calls with correct names.
+//! Defines struct interface for system calls. Implements a parser for `unistd.h`'s syscall
+//! table in order to generate system calls with correct names.
 
 use std::collections::HashMap;
 use std::fmt;

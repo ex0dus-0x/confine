@@ -1,7 +1,5 @@
-//! confine.rs
-//!
-//!     CLI interface for confine library modules. Implements tracing under two
-//!     different modes, and provides deserialization support to serializable formats.
+//! CLI interface for confine library modules. Implements tracing under two
+//! different modes, and provides deserialization support to serializable formats.
 
 #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
 extern crate clap;
@@ -113,11 +111,11 @@ fn main() {
         .about("security-focused process tracer with policy handling capabilities")
         .author("ex0dus-0x <ex0dus at codemuch.tech>")
         .arg(
-            Arg::with_name("command")
+            Arg::with_name("COMMAND")
                 .help("Command to analyze as child, including positional arguments")
                 .raw(true)
                 .takes_value(true)
-                .required(true),
+                .required(true)
         )
         .arg(
             Arg::with_name("policy_path")
@@ -126,7 +124,7 @@ fn main() {
                 .long("policy")
                 .takes_value(true)
                 .value_name("POLICY_PATH")
-                .required(false),
+                .required(false)
         )
         .arg(
             Arg::with_name("generate_profile")
@@ -134,7 +132,7 @@ fn main() {
                 .short("g")
                 .long("generate")
                 .takes_value(false)
-                .required(false),
+                .required(false)
         )
         .arg(
             Arg::with_name("trace_mode")
@@ -145,7 +143,7 @@ fn main() {
                 .default_value("ptrace")
                 .takes_value(true)
                 .value_name("TRACE_MODE")
-                .required(false),
+                .required(false)
         )
         .arg(
             Arg::with_name("json")
@@ -153,7 +151,7 @@ fn main() {
                 .short("j")
                 .long("json")
                 .takes_value(false)
-                .required(false),
+                .required(false)
         )
         .arg(
             Arg::with_name("verbosity")
@@ -162,7 +160,7 @@ fn main() {
                 .long("verbosity")
                 .multiple(true)
                 .takes_value(false)
-                .required(false),
+                .required(false)
         )
         .get_matches();
 
@@ -177,7 +175,7 @@ fn main() {
     info!("Initialized logger");
 
     // collect args into vec and convert to String for lifetime
-    let _args: Vec<&str> = matches.values_of("command").unwrap().collect::<Vec<&str>>();
+    let _args: Vec<&str> = matches.values_of("COMMAND").unwrap().collect::<Vec<&str>>();
     let args: Vec<String> = _args.iter().map(|s| s.to_string()).collect();
 
     debug!("Command and arguments: {:?}", args);

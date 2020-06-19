@@ -1,7 +1,5 @@
-//! policy.rs
-//!
-//!     Defines common confine policy format. Is used to then generate
-//!     output configs for enforcers, or actual contained enforcement.
+//! Defines common confine policy format. Is used to then generate
+//! output configs for enforcers, or actual contained enforcement.
 
 use std::boxed::Box;
 use std::collections::HashMap;

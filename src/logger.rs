@@ -1,7 +1,4 @@
-//! logger.rs
-//!
-//!     TraceLogger logging facility implementation
-//!     for CLI verbosity.
+//! `TraceLogger` logging facility implementation for CLI verbosity.
 
 use log::{Level, Metadata, Record};
 
