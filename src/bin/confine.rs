@@ -1,99 +1,60 @@
 //! CLI interface for confine library modules. Implements tracing under two
 //! different modes, and provides deserialization support to serializable formats.
 
-#[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
-extern crate clap;
-extern crate confine;
-extern crate failure;
-
-#[macro_use]
-extern crate log;
-
 use std::boxed::Box;
 use std::path::PathBuf;
 
 use clap::{App, Arg};
-use failure::Error;
-use log::LevelFilter;
+use log::{log, LevelFilter};
 
 use confine::enforcers::Enforcer;
 use confine::logger::TraceLogger;
 use confine::policy::PolicyInterface;
-use confine::trace::{Ebpf, ProcessHandler, Ptrace};
+use confine::trace::Tracer;
 
 static LOGGER: TraceLogger = TraceLogger;
 
-/// `TraceProc` provides a builder interface for initializing and interacting with a specified PID. It implements
+/// `TraceProc` provides an interface for initializing and interacting with a specified PID. It implements
 /// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
+#[derive(Default)]
 struct TraceProc {
-    mode: Box<dyn ProcessHandler>,
-    json: bool,
+    tracer: Tracer,
     policy: Option<PolicyInterface>,
-}
-
-impl Default for TraceProc {
-    fn default() -> Self {
-        Self {
-            mode: Box::new(Ptrace::new()),
-            json: false,
-            policy: None,
-        }
-    }
+    json: bool,
 }
 
 impl TraceProc {
     /// `new()` initializes a new TraceProc interface with default attributes. Expects developer to build up struct
     /// with following builder methods.
-    fn new() -> Self {
-        Self::default()
-    }
-
-    /// `_parse_handler()` is a factory-like helper method that returns a trait object that represents the instance
-    /// of a struct that satisfies the ProcessHandler trait bound.
-    #[inline]
-    fn _parse_handler(handler_str: &str) -> Box<dyn ProcessHandler + 'static> {
-        match handler_str {
-            "ptrace" => Box::new(Ptrace::new()),
-            "ebpf" => Box::new(Ebpf::new()),
-            _ => unreachable!(),
-        }
-    }
-
-    /// `trace_handler()` builds up TraceProc by parsing a user-specified handler input and instantiating the appropriate
-    /// one that implements the ProcessHandler trait bound.
-    fn trace_handler(mut self, handler_str: &str) -> Self {
-        self.mode = Self::_parse_handler(handler_str);
-        self
-    }
-
-    /// `policy_config()` builds up TraceProc by parsing in a common confine policy and a specified
-    /// output policy enforcer format (ie seccomp, apparmor)
-    fn policy_config(mut self, _policy: Option<PathBuf>) -> Self {
-        if let Some(policy) = _policy {
-            self.policy = match PolicyInterface::new_policy(policy) {
-                Ok(_policy) => Some(_policy),
+    fn new(_policy: Option<PathBuf>, json: bool) -> Self {
+        // instantiates policy interface if file is given
+        let policy: Option<PolicyInterface> = match _policy {
+            Some(pol) => match PolicyInterface::new_policy(pol) {
+                Ok(p) => Some(p),
                 Err(_) => None,
-            };
+            },
+            n => n,
+        };
+
+        // instantiate new tracer
+        let tracer: Tracer = Tracer::new();
+
+        Self {
+            tracer,
+            policy,
+            json,
         }
-        self
     }
 
-    /// `out_json()` builds up and configures TraceProc to output json after trace.
-    /// TODO: should be enhanced in order to consume various serde-compatible file formats.
-    fn out_json(mut self, json: bool) -> Self {
-        self.json = json;
-        self
-    }
-
-    /// `run_trace()` takes an initialized TraceProc with mode and execute a normal trace, and store to struct.
-    /// Once traced, we can preemptively output the trace as well, in the case the user only wants a trace.
+    /// takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
+    /// we can preemptively output the trace as well, in the case the user only wants a trace.
     fn run_trace(
         &mut self,
         args: Vec<String>,
         output: bool,
         gen_profile: bool,
     ) -> Result<(), Error> {
-        let table = Some(self.mode.trace(args)?);
+        let table = Some(self.tracer.trace(args)?);
         if output {
             if !self.json {
                 println!("{}", table.unwrap())
@@ -115,7 +76,7 @@ fn main() {
                 .help("Command to analyze as child, including positional arguments")
                 .raw(true)
                 .takes_value(true)
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("policy_path")
@@ -124,7 +85,7 @@ fn main() {
                 .long("policy")
                 .takes_value(true)
                 .value_name("POLICY_PATH")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::with_name("generate_profile")
@@ -132,18 +93,7 @@ fn main() {
                 .short("g")
                 .long("generate")
                 .takes_value(false)
-                .required(false)
-        )
-        .arg(
-            Arg::with_name("trace_mode")
-                .help("Mode used for process tracing (ebpf or ptrace).")
-                .short("m")
-                .long("trace_mode")
-                .possible_values(&["ebpf", "ptrace"])
-                .default_value("ptrace")
-                .takes_value(true)
-                .value_name("TRACE_MODE")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::with_name("json")
@@ -151,7 +101,7 @@ fn main() {
                 .short("j")
                 .long("json")
                 .takes_value(false)
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::with_name("verbosity")
@@ -160,7 +110,7 @@ fn main() {
                 .long("verbosity")
                 .multiple(true)
                 .takes_value(false)
-                .required(false)
+                .required(false),
         )
         .get_matches();
 
@@ -180,22 +130,18 @@ fn main() {
 
     debug!("Command and arguments: {:?}", args);
 
-    // determine trace mode of operation
-    let mode = matches.value_of("trace_mode").unwrap();
-    info!("Utilizing trace mode: {}", mode);
-
     // parse out policy generation options
     let policy_path: Option<PathBuf> = matches
         .value_of("policy_path")
         .map_or(None, |p| Some(PathBuf::from(p)));
     info!("Using input policy path: {:?}", policy_path);
 
+    // json configuration
+    let json: bool = matches.is_present("json");
+
     // initialize TraceProc interface
     info!("Starting up TraceProc instantiation");
-    let mut proc = TraceProc::new()
-        .policy_config(policy_path)
-        .trace_handler(mode)
-        .out_json(matches.is_present("json"));
+    let mut proc = TraceProc::new(policy_path, json);
 
     // check for presence of flag to generate profile
     // NOTE: this is ignored if no policy path is specified

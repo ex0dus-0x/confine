@@ -1,161 +1,48 @@
-//! mod.rs
-//!
-//!     Defines modes of operation for syscall and library tracing.
-//!     Provides several interfaces and wrappers to the `trace` submodule
-//!     in order to allow convenient tracing.
+//! Defines modes of operation for syscall and library tracing.
+//! Provides several interfaces and wrappers to the `trace` submodule
+//! in order to allow convenient tracing.
 
 use libc::{c_int, pid_t};
 
 use unshare::Command;
 use unshare::Namespace;
 
-use bcc::core::BPF;
-use bcc::perf;
+use std::io::Error as IOError;
 
 use crate::syscall::{SyscallError, SyscallManager};
-
-use failure::Error as FailError;
-use std::io::Error as IOError;
 
 pub mod ptrace;
 use self::ptrace::consts::{options, regs};
 use self::ptrace::helpers;
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum TraceError {
-    #[fail(display = "Could not interact with syscall manager.")]
     ManagerError(SyscallError),
-
-    #[fail(display = "Could not spawn child tracee process. Reason: {}", reason)]
-    SpawnError { reason: String },
-
-    #[fail(
-        display = "Could not step through child PID {}. Reason: {}",
-        pid, reason
-    )]
-    StepError { pid: pid_t, reason: String },
-
-    #[fail(display = "PTRACE_{} failed with error `{}`", call, reason)]
-    PtraceError { call: &'static str, reason: IOError },
-
-    #[fail(display = "Could not initialize BPF source. Reason: {}", reason)]
-    BPFError { reason: FailError },
-
-    #[fail(
-        display = "Could not attach kprobe to tracepoint {}. Reason: {}",
-        tracepoint, reason
-    )]
+    SpawnError {
+        reason: String,
+    },
+    StepError {
+        pid: pid_t,
+        reason: String,
+    },
+    PtraceError {
+        call: &'static str,
+        reason: IOError,
+    },
     ProbeError {
         tracepoint: &'static str,
         reason: FailError,
     },
 }
 
-/// trait that handles support for extending tracing support
-/// for various modes. Wraps around our tracing mode of operations.
-pub trait ProcessHandler {
-    // initializes a new interface that implements the ProcessHandler trait
-    fn new() -> Self
-    where
-        Self: Sized;
-
-    // handle calls with the appropriate trace method based on rules implemented
-    //fn handle_rules() -> Result<(), TraceError>
-
-    // runs the appropriate trace method with arguments to the program
-    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError>;
-}
-
-/// wrapper interface for ebpf tracing. Contains methods for dynamic ebpf code generation
-/// for rust bcc bindings, and attaching hooks to read and parse syscall events.
-pub struct Ebpf {
-    manager: SyscallManager,
-}
-
-impl ProcessHandler for Ebpf {
-    fn new() -> Self {
-        Self {
-            manager: SyscallManager::new(),
-        }
-    }
-
-    /// the `trace()` implementation for eBPF first instantiates from a source template,
-    /// and attaches a callback that reads syscall events from a perf map that parsed out
-    /// various components of a system call.
-    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
-        let code = include_str!("ebpf/template.c");
-
-        // TODO: generate source per syscall
-
-        // initialize new BPF module
-        let mut module: BPF = BPF::new(code).map_err(|e| TraceError::BPFError { reason: e })?;
-
-        // attach kprobe and kretprobe on system calls
-        for (_, syscall) in self.manager.syscall_table.iter() {
-            // initialize a kprobe at the event of entering a syscall
-            let entry_probe = match module.load_kprobe("trace_entry") {
-                Ok(probe) => probe,
-                Err(e) => {
-                    return Err(TraceError::ProbeError {
-                        tracepoint: "trace_entry",
-                        reason: e,
-                    });
-                }
-            };
-
-            // initialize probe at event of syscall finishing execution
-            let ret_probe = match module.load_kprobe("trace_return") {
-                Ok(probe) => probe,
-                Err(e) => {
-                    return Err(TraceError::ProbeError {
-                        tracepoint: "trace_return",
-                        reason: e,
-                    });
-                }
-            };
-
-            let event = &format!("do_sys_{}", syscall);
-
-            if let Err(e) = module.attach_kprobe(event, entry_probe) {
-                return Err(TraceError::BPFError { reason: e });
-            }
-
-            if let Err(e) = module.attach_kretprobe(event, ret_probe) {
-                return Err(TraceError::BPFError { reason: e });
-            }
-        }
-
-        let table = module.table("events");
-        let mut perf_map = perf::init_perf_map(table, Ebpf::perf_callback)
-            .map_err(|e| TraceError::BPFError { reason: e })?;
-
-        // TODO: break after a duration of execution, otherwise function doesn't return
-        loop {
-            perf_map.poll(200);
-        }
-
-        Ok(self.manager.clone())
-    }
-}
-
-impl Ebpf {
-    /// `perf_callback` is a callback routine invoked by bcc when encountering syscall events. Reads and parses
-    /// a structure that encapsulates a system call, and outputs accordingly to a syscall manager.
-    /// TODO
-    #[inline]
-    fn perf_callback() -> Box<FnMut(&[u8]) + Send> {
-        Box::new(|_| {})
-    }
-}
-
 /// wrapper interface for ptrace tracing. Enforces various methods around important
 /// syscalls and libc calls that allows convenient tracer/tracee process interactions.
-pub struct Ptrace {
+pub struct Tracer {
     pid: pid_t,
     manager: SyscallManager,
 }
 
-impl ProcessHandler for Ptrace {
+impl Tracer {
     fn new() -> Self {
         Self {
             pid: 0,
@@ -227,9 +114,7 @@ impl ProcessHandler for Ptrace {
         }
         Ok(self.manager.clone())
     }
-}
 
-impl Ptrace {
     /// `step()` defines the main instrospection performed ontop of the traced process, using
     /// ptrace to parse out syscall registers for output.
     fn step(&mut self) -> Result<Option<c_int>, TraceError> {

@@ -7,8 +7,11 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
+use log::{info, warn, debug};
+
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use lazy_static::lazy_static;
 
 // TODO: check paths preemptively
 
@@ -95,15 +98,10 @@ pub struct SyscallManager {
 
 /// `SysManagerError` defines failures that can occur during
 /// system call parsing.
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum SyscallError {
-    #[fail(display = "File i/o error with parsing syscalls")]
     IOError(std::io::Error),
-
-    #[fail(display = "System call number {} not supported", id)]
     UnsupportedSyscall { id: u64 },
-
-    #[fail(display = "Cannot parse out a system call table. Reason: {}", reason)]
     SyscallTableError { reason: &'static str },
 }
 

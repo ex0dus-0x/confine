@@ -6,8 +6,8 @@
 //!  - policy parsing and generation
 //!  - enforcer API for policy generation and enforcement
 
-pub mod logger;
+pub mod enforcers;
+mod logger;
+pub mod policy;
 pub mod syscall;
 pub mod trace;
-pub mod policy;
-pub mod enforcers;
