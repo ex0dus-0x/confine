@@ -10,8 +10,6 @@ use crate::policy::PolicyInterface;
 pub enum EnforcerType {
     Default,
     Seccomp,
-    AppArmor,
-    Unsupported(String),
 }
 
 /// the `Enforcer` trait provides a base interface for all structs that implement functionality for a

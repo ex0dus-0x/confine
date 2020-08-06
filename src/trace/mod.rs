@@ -31,7 +31,7 @@ pub enum TraceError {
     },
     ProbeError {
         tracepoint: &'static str,
-        reason: FailError,
+        reason: String,
     },
 }
 
@@ -70,21 +70,18 @@ impl Tracer {
         cmd.before_exec(helpers::traceme);
 
         // spawns a child process handler
-        info!("Initializing child process and calling PTRACE_TRACEME");
         let child = match cmd.spawn() {
             Ok(handler) => handler,
-            Err(e) => {
+            Err(_) => {
                 return Err(TraceError::SpawnError {
-                    reason: e.to_string(),
+                    reason: "Failed to spawn child process".to_string(),
                 });
             }
         };
 
         // retrieve spawned child process ID and store for tracer routines
         self.pid = child.pid();
-        debug!("Child PID: {}", self.pid);
 
-        info!("Setting trace options with PTRACE_SETOPTIONS");
         helpers::set_options(self.pid, options::PTRACE_O_TRACESYSGOOD as usize).map_err(|e| {
             TraceError::PtraceError {
                 call: "SETOPTIONS",
@@ -93,21 +90,19 @@ impl Tracer {
         })?;
 
         // execute loop that examines through syscalls
-        info!("Executing parent with tracing");
         loop {
             match self.step() {
                 Ok(Some(status)) => {
                     if status == 0 {
                         break;
                     } else {
-                        debug!("Status reported: {:?}", status);
                     }
                 }
                 Ok(None) => {}
-                Err(e) => {
+                Err(_) => {
                     return Err(TraceError::StepError {
                         pid: self.pid,
-                        reason: e.to_string(),
+                        reason: "Cannot continue execution".to_string(),
                     });
                 }
             }
@@ -118,7 +113,6 @@ impl Tracer {
     /// `step()` defines the main instrospection performed ontop of the traced process, using
     /// ptrace to parse out syscall registers for output.
     fn step(&mut self) -> Result<Option<c_int>, TraceError> {
-        info!("ptrace-ing with PTRACE_SYSCALL to SYS_ENTER");
         helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
             call: "SYSCALL",
             reason: e,
@@ -130,13 +124,11 @@ impl Tracer {
 
         // determine syscall number and initialize
         let syscall_num = self.get_syscall_num()?;
-        debug!("Syscall number: {:?}", syscall_num);
 
         // retrieve first 3 arguments from syscall
         let mut args: Vec<u64> = Vec::new();
         for i in 0..3 {
             let _arg = self.get_arg(i)?;
-            debug!("Reading from {:?}", _arg);
 
             let arg = self.read_arg(_arg)?;
             args.push(arg);
@@ -147,7 +139,6 @@ impl Tracer {
             .add_syscall(syscall_num, args)
             .map_err(TraceError::ManagerError)?;
 
-        info!("ptrace-ing with PTRACE_SYSCALL to SYS_EXIT");
         helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
             call: "SYSCALL",
             reason: e,

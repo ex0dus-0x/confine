@@ -5,7 +5,10 @@ use std::boxed::Box;
 use std::path::PathBuf;
 
 use clap::{App, Arg};
+
 use log::{log, LevelFilter};
+use log::{debug, warn, fail, info};
+
 
 use confine::enforcers::Enforcer;
 use confine::logger::TraceLogger;
@@ -26,7 +29,7 @@ struct TraceProc {
 impl TraceProc {
     /// `new()` initializes a new TraceProc interface with default attributes. Expects developer to build up struct
     /// with following builder methods.
-    fn new(_policy: Option<PathBuf>, json: bool) -> Self {
+    pub fn new(_policy: Option<PathBuf>, json: bool) -> Self {
         // instantiates policy interface if file is given
         let policy: Option<PolicyInterface> = match _policy {
             Some(pol) => match PolicyInterface::new_policy(pol) {
@@ -68,19 +71,18 @@ impl TraceProc {
 
 #[allow(unused_must_use)]
 fn main() {
-    let matches = App::new("confine")
-        .about("security-focused process tracer with policy handling capabilities")
-        .author("ex0dus-0x <ex0dus at codemuch.tech>")
+    let matches = App::new(env!("CRATE_NAME"))
+        .about(env!("CRATE_DESCRIPTION"))
         .arg(
             Arg::with_name("COMMAND")
-                .help("Command to analyze as child, including positional arguments")
+                .help("Command to run under sandboxing, including any positional arguments")
                 .raw(true)
                 .takes_value(true)
                 .required(true),
         )
         .arg(
             Arg::with_name("policy_path")
-                .help("Path to policy file to use for enforcement")
+                .help("Path to policy file to parse and enforce on the command being run")
                 .short("p")
                 .long("policy")
                 .takes_value(true)

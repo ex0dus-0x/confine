@@ -7,13 +7,9 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
-use log::{info, warn, debug};
-
+use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use lazy_static::lazy_static;
-
-// TODO: check paths preemptively
 
 // path to unistd file with syscall number definitions, based on arch
 #[cfg(target_arch = "x86_64")]
