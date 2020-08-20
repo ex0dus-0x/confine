@@ -11,6 +11,8 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+use crate::error::SyscallError;
+
 // path to unistd file with syscall number definitions, based on arch
 #[cfg(target_arch = "x86_64")]
 //static SYSCALL_TABLE: &str = "/usr/include/x86_64-linux-gnu/asm/unistd_64.h";
@@ -90,15 +92,6 @@ pub struct SyscallManager {
 
     #[serde(skip)]
     pub syscall_table: SyscallTable,
-}
-
-/// `SysManagerError` defines failures that can occur during
-/// system call parsing.
-#[derive(Debug)]
-pub enum SyscallError {
-    IOError(std::io::Error),
-    UnsupportedSyscall { id: u64 },
-    SyscallTableError { reason: &'static str },
 }
 
 impl SyscallManager {

@@ -3,51 +3,34 @@
 //! in order to allow convenient tracing.
 
 use libc::{c_int, pid_t};
-
 use unshare::Command;
 use unshare::Namespace;
 
-use std::io::Error as IOError;
+use crate::error::{TraceError, SyscallError};
+use crate::ptrace::consts::{options, regs};
+use crate::ptrace::helpers;
+use crate::syscall::SyscallManager;
 
-use crate::syscall::{SyscallError, SyscallManager};
 
-pub mod ptrace;
-use self::ptrace::consts::{options, regs};
-use self::ptrace::helpers;
-
-#[derive(Debug)]
-pub enum TraceError {
-    ManagerError(SyscallError),
-    SpawnError {
-        reason: String,
-    },
-    StepError {
-        pid: pid_t,
-        reason: String,
-    },
-    PtraceError {
-        call: &'static str,
-        reason: IOError,
-    },
-    ProbeError {
-        tracepoint: &'static str,
-        reason: String,
-    },
-}
-
-/// wrapper interface for ptrace tracing. Enforces various methods around important
+/// Wrapper interface for ptrace tracing. Enforces various methods around important
 /// syscalls and libc calls that allows convenient tracer/tracee process interactions.
 pub struct Tracer {
     pid: pid_t,
     manager: SyscallManager,
 }
 
-impl Tracer {
-    fn new() -> Self {
+impl Default for Tracer {
+    fn default() -> Self {
         Self {
             pid: 0,
             manager: SyscallManager::new(),
         }
+    }
+}
+
+impl Tracer {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     // TODO: implement `handle_rules()` to block system calls (or report them)
@@ -55,7 +38,7 @@ impl Tracer {
 
     /// `trace()` functionality for ptrace mode. Forks a child process, and uses parent to
     /// to step through syscall events.
-    fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
+    pub fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().next() {
             cmd.arg(arg);
@@ -136,8 +119,8 @@ impl Tracer {
 
         // add syscall to manager
         self.manager
-            .add_syscall(syscall_num, args)
-            .map_err(TraceError::ManagerError)?;
+            .add_syscall(syscall_num, args).unwrap();
+        //.map_err(SyscallError)?;
 
         helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
             call: "SYSCALL",
