@@ -7,10 +7,11 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
+use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-// TODO: check paths preemptively
+use crate::error::SyscallError;
 
 // path to unistd file with syscall number definitions, based on arch
 #[cfg(target_arch = "x86_64")]
@@ -91,20 +92,6 @@ pub struct SyscallManager {
 
     #[serde(skip)]
     pub syscall_table: SyscallTable,
-}
-
-/// `SysManagerError` defines failures that can occur during
-/// system call parsing.
-#[derive(Debug, Fail)]
-pub enum SyscallError {
-    #[fail(display = "File i/o error with parsing syscalls")]
-    IOError(std::io::Error),
-
-    #[fail(display = "System call number {} not supported", id)]
-    UnsupportedSyscall { id: u64 },
-
-    #[fail(display = "Cannot parse out a system call table. Reason: {}", reason)]
-    SyscallTableError { reason: &'static str },
 }
 
 impl SyscallManager {

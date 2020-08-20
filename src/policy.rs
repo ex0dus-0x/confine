@@ -74,7 +74,6 @@ impl Policy {
         match &self.manifest.enforcer {
             Some(name) => match name.as_str() {
                 "seccomp" => EnforcerType::Seccomp,
-                "apparmor" => EnforcerType::AppArmor,
                 _ => EnforcerType::Default,
             },
             None => EnforcerType::Default,

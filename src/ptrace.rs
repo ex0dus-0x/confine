@@ -1,6 +1,6 @@
-//! Currently, `nix` support for `ptrace(2)` on the most recent version of the crate
-//! (as of working, 0.12.0) is deprecated. This is a re-implementation of `ptrace(2)` that
-//! allows safer usage through a specialized helper function.
+//! This is a built-in reimplementation of a wrapper to `ptrace`. We use this in order to extend
+//! upon over functionalities of ptrace `nix` may not currently support, and to remove the need for
+//! it as a whole dependency.
 
 pub mod consts {
 
