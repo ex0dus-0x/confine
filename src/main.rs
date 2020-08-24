@@ -1,13 +1,13 @@
 //! CLI interface for confine library modules. Implements tracing under two
 //! different modes, and provides deserialization support to serializable formats.
 
-use std::path::PathBuf;
 use std::error::Error;
+use std::path::PathBuf;
 
 use clap::{App, Arg};
 
-use confine::error::TraceError;
 use confine::enforcers::Enforcer;
+use confine::error::TraceError;
 use confine::policy::PolicyInterface;
 use confine::trace::Tracer;
 

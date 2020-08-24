@@ -6,11 +6,10 @@ use libc::{c_int, pid_t};
 use unshare::Command;
 use unshare::Namespace;
 
-use crate::error::{TraceError, SyscallError};
+use crate::error::{SyscallError, TraceError};
 use crate::ptrace::consts::{options, regs};
 use crate::ptrace::helpers;
 use crate::syscall::SyscallManager;
-
 
 /// Wrapper interface for ptrace tracing. Enforces various methods around important
 /// syscalls and libc calls that allows convenient tracer/tracee process interactions.
@@ -118,8 +117,7 @@ impl Tracer {
         }
 
         // add syscall to manager
-        self.manager
-            .add_syscall(syscall_num, args).unwrap();
+        self.manager.add_syscall(syscall_num, args).unwrap();
         //.map_err(SyscallError)?;
 
         helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {

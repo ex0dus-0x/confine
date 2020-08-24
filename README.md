@@ -32,12 +32,11 @@ $ confine -- mycommand [arg1] ...
 ```
 
 This will run `confine` as an elevated `strace` clone, and can be configured further, such as the output
-format, or the tracing mechanism:
+format:
 
 ```
-$ confine --trace_mode ebpf --json  -- mycommand [arg1] ...
+$ confine --json -- mycommand [arg1] ...
 ```
-
 
 To run a policy against an execution trace, we can define a common trace policy in TOML, and execute as so:
 
@@ -50,7 +49,6 @@ If the policy executed defines an enforcer as part of the manifest, we can also 
 ```
 $ confine --policy mypolicy.toml --generate_profile -- mycommand [arg1] ...
 ```
-
 
 ## See also
 

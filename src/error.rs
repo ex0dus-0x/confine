@@ -7,7 +7,6 @@ use std::io::Error as IOError;
 
 use libc::pid_t;
 
-
 /// `SysManagerError` defines failures that can occur during system call parsing.
 #[derive(Debug)]
 pub enum SyscallError {
@@ -23,8 +22,6 @@ impl Display for SyscallError {
 }
 
 impl Error for SyscallError {}
-
-
 
 /// Defines the different variants of errors encountered while tracing a process
 #[derive(Debug)]
@@ -45,7 +42,6 @@ pub enum TraceError {
         reason: String,
     },
 }
-
 
 impl Display for TraceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), fmt::Error> {
