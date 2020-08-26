@@ -136,7 +136,7 @@ mod ptrace {
 
                 // error-check and ensure that errno is actually not a false positive
                 if ret < 0 {
-                    return Err(Error::from_raw_os_error(ret as i32));
+                    return Err(Error::last_os_error());
                 }
                 return Ok(ret);
             }

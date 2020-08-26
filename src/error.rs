@@ -1,5 +1,5 @@
 //! Implements the error types used throughout the confine implementation whenever an exception is
-//! encountered during runt
+//! encountered during runtime.
 
 use std::error::Error;
 use std::fmt::{self, Display};

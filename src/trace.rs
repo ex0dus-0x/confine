@@ -108,10 +108,10 @@ impl Tracer {
 
         // retrieve first 3 arguments from syscall
         let mut args: Vec<u64> = Vec::new();
-        for i in 0..3 {
+        for i in 0..2 {
             let _arg = self.get_arg(i)?;
-            let arg = self.read_arg(_arg)?;
-            args.push(arg);
+            //let arg = self.read_arg(_arg)?;
+            args.push(_arg);
         }
 
         // add syscall to manager
@@ -147,18 +147,18 @@ impl Tracer {
     /// `get_arg()` is called to introspect current process states register values in order to determine syscall
     /// and arguments passed.
     fn get_arg(&mut self, reg: u8) -> Result<u64, TraceError> {
+
+
         #[cfg(target_arch = "x86_64")]
-        let offset = if cfg!(target_arch = "x86_64") {
-            match reg {
-                0 => regs::RDI,
-                1 => regs::RSI,
-                2 => regs::RDX,
-                3 => regs::RCX,
-                4 => regs::R8,
-                5 => regs::R9,
-                _ => panic!("Unmatched argument offset"),
-            }
-        } else {
+        let offset = match reg {
+            0 => regs::RDI,
+            1 => regs::RSI,
+            2 => regs::RDX,
+            3 => regs::RCX,
+            4 => regs::R8,
+            5 => regs::R9,
+            _ => panic!("Unmatched argument offset"),
+        };
             /* TODO: register values for 32bit registers
             match reg {
                 0 => regs::EBX,
@@ -170,8 +170,6 @@ impl Tracer {
                 _ => panic!("Unmatched argument offset")
             }
             */
-            unimplemented!()
-        };
 
         let regval: i64 = helpers::peek_user(self.pid, offset)
             .map_err(|e| TraceError::PtraceError {
@@ -183,21 +181,21 @@ impl Tracer {
 
     /// `read_arg()` uses ptrace with PEEKTEXT in order to read out contents for a specified address.
     fn read_arg(&mut self, addr: u64) -> Result<u64, TraceError> {
-        helpers::peek_text(self.pid, addr as usize)
-            .map(|x| x as u64)
+        let argval: i64 = helpers::peek_text(self.pid, addr as usize)
             .map_err(|e| TraceError::PtraceError {
                 call: "PEEKTEXT",
                 reason: e,
-            })
+            })?;
+        Ok(argval as u64)
     }
 
     /// `get_syscall_num()` uses ptrace with PEEKUSER to return the syscall num from ORIG_RAX.
     fn get_syscall_num(&mut self) -> Result<u64, TraceError> {
-        helpers::peek_user(self.pid, regs::ORIG_RAX)
-            .map(|x| x as u64)
+        let num: i64 = helpers::peek_user(self.pid, regs::ORIG_RAX)
             .map_err(|e| TraceError::PtraceError {
                 call: "PEEKUSER",
                 reason: e,
-            })
+            })?;
+        Ok(num as u64)
     }
 }
