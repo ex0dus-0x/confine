@@ -44,7 +44,6 @@ impl Tracer {
         }
 
         // initialize with unshared namespaces for container-like environment
-        // TODO: configurability by flag
         let namespaces = vec![Namespace::User, Namespace::Cgroup];
         cmd.unshare(&namespaces);
 
@@ -81,10 +80,10 @@ impl Tracer {
                     }
                 }
                 Ok(None) => {}
-                Err(_) => {
+                Err(e) => {
                     return Err(TraceError::StepError {
                         pid: self.pid,
-                        reason: "Cannot continue execution".to_string(),
+                        reason: e.to_string(),
                     });
                 }
             }
@@ -92,7 +91,7 @@ impl Tracer {
         Ok(self.manager.clone())
     }
 
-    /// `step()` defines the main instrospection performed ontop of the traced process, using
+    /// `step()` defines the main introspection performed ontop of the traced process, using
     /// ptrace to parse out syscall registers for output.
     fn step(&mut self) -> Result<Option<c_int>, TraceError> {
         helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
@@ -111,7 +110,6 @@ impl Tracer {
         let mut args: Vec<u64> = Vec::new();
         for i in 0..3 {
             let _arg = self.get_arg(i)?;
-
             let arg = self.read_arg(_arg)?;
             args.push(arg);
         }
@@ -175,12 +173,12 @@ impl Tracer {
             unimplemented!()
         };
 
-        helpers::peek_user(self.pid, offset)
-            .map(|x| x as u64)
+        let regval: i64 = helpers::peek_user(self.pid, offset)
             .map_err(|e| TraceError::PtraceError {
                 call: "PEEKUSER",
                 reason: e,
-            })
+            })?;
+        Ok(regval as u64)
     }
 
     /// `read_arg()` uses ptrace with PEEKTEXT in order to read out contents for a specified address.
