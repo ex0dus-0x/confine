@@ -11,7 +11,7 @@ use confine::error::TraceError;
 use confine::policy::PolicyInterface;
 use confine::trace::Tracer;
 
-/// `TraceProc` provides an interface for initializing and interacting with a specified PID. It implements
+/// Provides an interface for initializing and interacting with a specified PID. It implements
 /// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
 #[derive(Default)]
 struct TraceProc {
@@ -21,8 +21,7 @@ struct TraceProc {
 }
 
 impl TraceProc {
-    /// `new()` initializes a new TraceProc interface with default attributes. Expects developer to build up struct
-    /// with following builder methods.
+    /// Initialize a new TraceProc interface with default attributes for use with builder methods
     pub fn new(_policy: Option<PathBuf>, json: bool) -> Self {
         // instantiates policy interface if file is given
         let policy: Option<PolicyInterface> = match _policy {
@@ -43,7 +42,7 @@ impl TraceProc {
         }
     }
 
-    /// takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
+    /// Takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
     /// we can preemptively output the trace as well, in the case the user only wants a trace.
     pub fn run_trace(
         &mut self,

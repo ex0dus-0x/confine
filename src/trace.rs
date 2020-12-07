@@ -1,10 +1,8 @@
-//! Defines modes of operation for syscall and library tracing.
-//! Provides several interfaces and wrappers to the `trace` submodule
-//! in order to allow convenient tracing.
+//! Defines modes of operation for syscall and library tracing. Provides several interfaces and
+//! wrappers to the `trace` submodule in order to allow convenient tracing.
 
 use libc::{c_int, pid_t};
-use unshare::Command;
-use unshare::Namespace;
+use unshare::{Command, Namespace};
 
 use crate::error::{SyscallError, TraceError};
 use crate::ptrace::consts::{options, regs};
@@ -35,9 +33,9 @@ impl Tracer {
     // TODO: implement `handle_rules()` to block system calls (or report them)
     //fn handle_rules(&mut self, rule_map)
 
-    /// `trace()` functionality for ptrace mode. Forks a child process, and uses parent to
-    /// to step through syscall events.
+    /// Runs a trace by forking child process, and uses parent to step through syscall events.
     pub fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
+        // create new unshare-wrapped command with arguments
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().next() {
             cmd.arg(arg);
@@ -48,7 +46,9 @@ impl Tracer {
         cmd.unshare(&namespaces);
 
         // call traceme helper to signal parent for tracing
-        cmd.before_exec(helpers::traceme);
+        unsafe {
+            cmd.pre_exec(helpers::traceme);
+        }
 
         // spawns a child process handler
         let child = match cmd.spawn() {
@@ -91,8 +91,7 @@ impl Tracer {
         Ok(self.manager.clone())
     }
 
-    /// `step()` defines the main introspection performed ontop of the traced process, using
-    /// ptrace to parse out syscall registers for output.
+    /// Introspect single event in traced process, using ptrace to parse out syscall registers for output.
     fn step(&mut self) -> Result<Option<c_int>, TraceError> {
         helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
             call: "SYSCALL",
@@ -129,7 +128,7 @@ impl Tracer {
         Ok(None)
     }
 
-    /// `wait()` wrapper to waitpid/wait4, with error-checking in order to return proper type back to developer.
+    /// Libc wrapper to waitpid/wait4, with error-checking in order to return proper type back to developer.
     fn wait(&self) -> Option<c_int> {
         let mut status = 0;
         unsafe {
@@ -144,11 +143,8 @@ impl Tracer {
         }
     }
 
-    /// `get_arg()` is called to introspect current process states register values in order to determine syscall
-    /// and arguments passed.
+    /// Introspect current process states register values in order to determine syscall and arguments passed.
     fn get_arg(&mut self, reg: u8) -> Result<u64, TraceError> {
-
-
         #[cfg(target_arch = "x86_64")]
         let offset = match reg {
             0 => regs::RDI,
@@ -159,40 +155,41 @@ impl Tracer {
             5 => regs::R9,
             _ => panic!("Unmatched argument offset"),
         };
-            /* TODO: register values for 32bit registers
-            match reg {
-                0 => regs::EBX,
-                1 => regs::ECX,
-                2 => regs::EDX,
-                3 => regs::ESI,
-                4 => regs::EDI,
-                5 => regs::EBP,
-                _ => panic!("Unmatched argument offset")
-            }
-            */
 
-        let regval: i64 = helpers::peek_user(self.pid, offset)
-            .map_err(|e| TraceError::PtraceError {
+        /* TODO: register values for 32bit registers
+        match reg {
+            0 => regs::EBX,
+            1 => regs::ECX,
+            2 => regs::EDX,
+            3 => regs::ESI,
+            4 => regs::EDI,
+            5 => regs::EBP,
+            _ => panic!("Unmatched argument offset")
+        }
+        */
+
+        let regval: i64 =
+            helpers::peek_user(self.pid, offset).map_err(|e| TraceError::PtraceError {
                 call: "PEEKUSER",
                 reason: e,
             })?;
         Ok(regval as u64)
     }
 
-    /// `read_arg()` uses ptrace with PEEKTEXT in order to read out contents for a specified address.
+    /// Use ptrace with PEEKTEXT in order to read out contents for a specified address.
     fn read_arg(&mut self, addr: u64) -> Result<u64, TraceError> {
-        let argval: i64 = helpers::peek_text(self.pid, addr as usize)
-            .map_err(|e| TraceError::PtraceError {
+        let argval: i64 =
+            helpers::peek_text(self.pid, addr as usize).map_err(|e| TraceError::PtraceError {
                 call: "PEEKTEXT",
                 reason: e,
             })?;
         Ok(argval as u64)
     }
 
-    /// `get_syscall_num()` uses ptrace with PEEKUSER to return the syscall num from ORIG_RAX.
+    /// Use ptrace with PEEKUSER to return the syscall num from ORIG_RAX.
     fn get_syscall_num(&mut self) -> Result<u64, TraceError> {
-        let num: i64 = helpers::peek_user(self.pid, regs::ORIG_RAX)
-            .map_err(|e| TraceError::PtraceError {
+        let num: i64 =
+            helpers::peek_user(self.pid, regs::ORIG_RAX).map_err(|e| TraceError::PtraceError {
                 call: "PEEKUSER",
                 reason: e,
             })?;
