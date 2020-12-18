@@ -6,8 +6,6 @@ use std::path::PathBuf;
 
 use clap::{App, Arg};
 
-use confine::enforcers::Enforcer;
-use confine::error::TraceError;
 use confine::policy::PolicyInterface;
 use confine::trace::Tracer;
 
@@ -17,12 +15,11 @@ use confine::trace::Tracer;
 struct TraceProc {
     tracer: Tracer,
     policy: Option<PolicyInterface>,
-    json: bool,
 }
 
 impl TraceProc {
     /// Initialize a new TraceProc interface with default attributes for use with builder methods
-    pub fn new(_policy: Option<PathBuf>, json: bool) -> Self {
+    pub fn new(_policy: Option<PathBuf>) -> Self {
         // instantiates policy interface if file is given
         let policy: Option<PolicyInterface> = match _policy {
             Some(pol) => match PolicyInterface::new_policy(pol) {
@@ -32,32 +29,19 @@ impl TraceProc {
             None => None,
         };
 
-        // instantiate new tracer
-        let tracer: Tracer = Tracer::new();
-
         Self {
-            tracer,
+            tracer: Tracer::new(),
             policy,
-            json,
         }
     }
 
+    // TODO: deal with policy
+
     /// Takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
     /// we can preemptively output the trace as well, in the case the user only wants a trace.
-    pub fn run_trace(
-        &mut self,
-        args: Vec<String>,
-        output: bool,
-        gen_profile: bool,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn run_trace(&mut self, args: Vec<String>) -> Result<(), Box<dyn Error>> {
         let table = Some(self.tracer.trace(args)?);
-        if output {
-            if !self.json {
-                println!("{}", table.unwrap())
-            } else {
-                println!("{}", table.unwrap().to_json()?);
-            }
-        }
+        println!("{}", table.unwrap().json_out()?);
         Ok(())
     }
 }
@@ -82,19 +66,10 @@ fn main() {
                 .required(false),
         )
         .arg(
-            Arg::with_name("generate_profile")
-                .help("If policy if set, generate a profile from enforcer")
-                .short("g")
-                .long("generate")
-                .takes_value(false)
-                .required(false),
-        )
-        .arg(
-            Arg::with_name("json")
-                .help("Output system call trace as JSON.")
-                .short("j")
-                .long("json")
-                .takes_value(false)
+            Arg::with_name("trace_only")
+                .help("Run only a standard trace against syscalls")
+                .short("t")
+                .long("trace_only")
                 .required(false),
         )
         .get_matches();
@@ -106,20 +81,13 @@ fn main() {
     // parse out policy generation options
     let policy_path: Option<PathBuf> = matches
         .value_of("policy_path")
-        .map_or(None, |p| Some(PathBuf::from(p)));
-
-    // json configuration
-    let json: bool = matches.is_present("json");
+        .map(|p| PathBuf::from(p));
 
     // initialize TraceProc interface
-    let mut proc = TraceProc::new(policy_path, json);
-
-    // check for presence of flag to generate profile
-    // NOTE: this is ignored if no policy path is specified
-    let generate_profile: bool = matches.is_present("generate_profile");
+    let mut proc = TraceProc::new(policy_path);
 
     // run trace depending on arguments specified
-    if let Err(e) = proc.run_trace(args, true, generate_profile) {
+    if let Err(e) = proc.run_trace(args) {
         eprintln!("confine exception: {:?}", e);
     }
 }

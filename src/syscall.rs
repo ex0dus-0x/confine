@@ -66,10 +66,10 @@ impl Default for SyscallGroup {
     }
 }
 
-/// Defines an arbitrary syscall, with support for de/serialization
-/// with serde_json.
+/// Defines an arbitrary syscall, with support for de/serialization with serde_json.
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Syscall {
+    #[serde(skip)]
     pub number: u64,
     pub name: String,
     args: Vec<u64>,
@@ -83,8 +83,7 @@ pub struct Syscall {
     status: Option<SyscallAction>,
 }
 
-/// `SyscallManager` stores a vector of Syscalls and manages a HashMap
-/// that stores syscall num and name mappings.
+/// Provides an interface for parsing and displaying system calls parsed by confine.
 #[derive(Serialize, Clone)]
 #[serde(rename = "syscalls")]
 pub struct SyscallManager {
@@ -94,20 +93,23 @@ pub struct SyscallManager {
     pub syscall_table: SyscallTable,
 }
 
+impl Default for SyscallManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SyscallManager {
-    /// `new()` initializes a manager with a parsed system call table,
-    /// ready for storing syscalls.
+    /// Generates syscall table to parse incoming system calls with.
     pub fn new() -> Self {
         let syscall_table = SyscallManager::parse_syscall_table().unwrap();
         Self {
             syscalls: Vec::new(),
-            syscall_table: syscall_table,
+            syscall_table,
         }
     }
 
-    /// `parse_syscall_table()` is a helper method that parses a "syscall table"
-    /// and instantiates a HashMap that stores the syscall num as a key and the name
-    /// as the value.
+    /// Helper method to create a Hashmap with number to syscall name mapping
     #[inline]
     pub fn parse_syscall_table() -> Result<SyscallTable, SyscallError> {
         // read unistd.h for macro definitions
@@ -149,22 +151,21 @@ impl SyscallManager {
         Ok(syscall_table)
     }
 
-    /// `add_syscall()` finds a corresponding syscall name from
-    /// a parsed syscall table and instantiates and stores a new Syscall.
-    pub fn add_syscall(&mut self, syscall_num: u64, args: Vec<u64>) -> Result<(), SyscallError> {
+    /// Given a syscall number and args, check against table and add for later display
+    pub fn add_syscall(&mut self, number: u64, args: Vec<u64>) -> Result<(), SyscallError> {
         // retrieve syscall name from HashMap by syscall_num key
-        let syscall_name = match self.syscall_table.get(&syscall_num) {
+        let syscall_name = match self.syscall_table.get(&number) {
             Some(s) => s,
             None => {
-                return Err(SyscallError::UnsupportedSyscall { id: syscall_num });
+                return Err(SyscallError::UnsupportedSyscall { id: number });
             }
         };
 
         // initialize Syscall definition and store
         let syscall = Syscall {
-            number: syscall_num,
+            number,
             name: syscall_name.to_string(),
-            args: args,
+            args,
             group: SyscallGroup::default(),
             status: None,
         };
@@ -172,14 +173,13 @@ impl SyscallManager {
         Ok(())
     }
 
-    /// helper that returns our system calls in a prettified JSON format
-    pub fn to_json(&mut self) -> serde_json::Result<String> {
+    /// Helper that returns our system calls in a prettified JSON format
+    pub fn json_out(&mut self) -> serde_json::Result<String> {
         serde_json::to_string_pretty(&self)
     }
 }
 
 impl fmt::Display for SyscallManager {
-    /// collect system calls and output in readable format
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let syscalls: Vec<String> = self
             .syscalls

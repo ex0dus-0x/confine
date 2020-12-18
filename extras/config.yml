@@ -1,6 +1,3 @@
-manifest:
-  enforcer: seccomp
-
 rules:
   - name: Open block rule
     syscall: open

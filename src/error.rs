@@ -7,7 +7,7 @@ use std::io::Error as IOError;
 
 use libc::pid_t;
 
-/// `SysManagerError` defines failures that can occur during system call parsing.
+/// Defines failures that can occur during system call parsing.
 #[derive(Debug)]
 pub enum SyscallError {
     IOError(IOError),

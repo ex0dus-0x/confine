@@ -1,5 +1,4 @@
-//! Defines common confine policy format. Is used to then generate
-//! output configs for enforcers, or actual contained enforcement.
+//! Defines common confine policy format for enforcement.
 
 use std::boxed::Box;
 use std::collections::HashMap;
@@ -11,26 +10,13 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use crate::enforcers::EnforcerType;
 use crate::syscall::{Syscall, SyscallAction, SyscallGroup, SyscallManager};
 
 // a type alias for a hashmap that provides a one-to-one mapping between syscall IDs and
 // action to perform.
 type PolicyMap = HashMap<u64, SyscallAction>;
 
-/// a `Manifest` is a required header per confine config. It is used
-/// to hold identifying information regarding the trace to be carried out,
-/// both basic configs and for rule enforcement.
-/// TODO: define more advanced configuration
-#[derive(Deserialize, Debug, Clone)]
-struct Manifest {
-    // represents the stringified enforcer to generate policy for
-    enforcer: Option<String>,
-}
-
-/// `SyscallType` implements the variants a user input for a syscall rule
-/// can be. It implements type conversion traits in order for serialization to
-/// convert to a valid type (TODO)
+/// Implements the variants a user input for a syscall rule can be.
 #[derive(Deserialize, Debug, Clone)]
 pub enum SyscallType {
     Syscall(Syscall),
@@ -38,8 +24,7 @@ pub enum SyscallType {
     // .. TODO: other ways to identify syscalls
 }
 
-/// a `Rule` is a eserializable wrapper around a syscall rule
-/// that eventually decomposes down to our policy map.
+/// Deserializable wrapper around a syscall rule that gets added to our policy map.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Rule {
     pub name: Option<String>,
@@ -47,15 +32,9 @@ pub struct Rule {
     pub action: SyscallAction,
 }
 
-/// Deserializable structure for actually storing parsed policy contents after
-/// consuming YAML configuration. Comprises of several components in order to
-/// dictate a "complete" configuration:
-///
-/// - one header manifest section
-/// - one or multiple rule sections
+/// Parsed policy contents after consuming YAML configuration.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Policy {
-    manifest: Manifest,
     pub rules: Option<Vec<Rule>>,
 }
 
@@ -67,37 +46,18 @@ impl Policy {
         file.read_to_string(&mut contents)?;
         serde_yaml::from_str(&contents).map_err(|e| e.into())
     }
-
-    /// `get_enforcer()` returns an EnforcerType from a string serialized from the configuration
-    /// manifest. If none is provided or isn't recognized, no enforcer will be used to generate a profile.
-    pub fn get_enforcer(&self) -> EnforcerType {
-        match &self.manifest.enforcer {
-            Some(name) => match name.as_str() {
-                "seccomp" => EnforcerType::Seccomp,
-                _ => EnforcerType::Default,
-            },
-            None => EnforcerType::Default,
-        }
-    }
 }
 
-/// defines an interface to policy parsing and handling. Stores internal map of
+/// Defines an interface to policy parsing and handling. Stores internal map of
 /// policy actions to enforce, and an actual parsed policy
-#[derive(Debug, Clone)]
-pub struct PolicyInterface {
-    enforcer: EnforcerType,
-    policy_map: PolicyMap,
-}
+#[derive(Clone)]
+pub struct PolicyInterface(PolicyMap);
 
 impl PolicyInterface {
-    /// `new_policy()` initializes an interface with a consumed policy file by parsing YAML into
-    /// a deserializable Policy for enforcer interaction.
+    /// Creates new policy map from given path.
     pub fn new_policy(path: PathBuf) -> io::Result<Self> {
         let policy = Policy::from_file(path).unwrap();
-        Ok(Self {
-            enforcer: policy.get_enforcer(),
-            policy_map: Self::gen_policy_map(policy),
-        })
+        Ok(Self(Self::gen_policy_map(policy)))
     }
 
     /// `gen_policy_map` is a helper that takes a parsed `Policy` and creates a
@@ -109,7 +69,7 @@ impl PolicyInterface {
         // TODO: refactor to make this unnecessary
         let table = SyscallManager::parse_syscall_table().unwrap();
 
-        if let None = policy.rules {
+        if policy.rules.is_none() {
             return map;
         } else if let Some(_rules) = policy.rules {
             let _ = _rules.iter().map(|rule| {

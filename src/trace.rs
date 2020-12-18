@@ -1,33 +1,33 @@
 //! Defines modes of operation for syscall and library tracing. Provides several interfaces and
 //! wrappers to the `trace` submodule in order to allow convenient tracing.
 
-use libc::{c_int, pid_t};
+use nix::sys::ptrace::{self, Options};
+use nix::sys::signal::Signal;
+use nix::sys::wait;
+use nix::unistd::Pid;
+
 use unshare::{Command, Namespace};
 
-use crate::error::{SyscallError, TraceError};
-use crate::ptrace::consts::{options, regs};
-use crate::ptrace::helpers;
+use crate::error::TraceError;
 use crate::syscall::SyscallManager;
 
-/// Wrapper interface for ptrace tracing. Enforces various methods around important
-/// syscalls and libc calls that allows convenient tracer/tracee process interactions.
+/// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
-    pid: pid_t,
     manager: SyscallManager,
 }
 
 impl Default for Tracer {
     fn default() -> Self {
-        Self {
-            pid: 0,
-            manager: SyscallManager::new(),
-        }
+        Self::new()
     }
 }
 
+
 impl Tracer {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            manager: SyscallManager::new(),
+        }
     }
 
     // TODO: implement `handle_rules()` to block system calls (or report them)
@@ -37,7 +37,7 @@ impl Tracer {
     pub fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
         // create new unshare-wrapped command with arguments
         let mut cmd = Command::new(&args[0]);
-        for arg in args.iter().next() {
+        for arg in args.iter().skip(1) {
             cmd.arg(arg);
         }
 
@@ -47,7 +47,7 @@ impl Tracer {
 
         // call traceme helper to signal parent for tracing
         unsafe {
-            cmd.pre_exec(helpers::traceme);
+            cmd.pre_exec(ptrace::traceme);
         }
 
         // spawns a child process handler
@@ -60,40 +60,34 @@ impl Tracer {
             }
         };
 
-        // retrieve spawned child process ID and store for tracer routines
-        self.pid = child.pid();
-
-        helpers::set_options(self.pid, options::PTRACE_O_TRACESYSGOOD as usize).map_err(|e| {
+        // create nix Pid and set options before stepping
+        let pid: Pid = Pid::from_raw(child.pid());
+        ptrace::setoptions(pid, Options::PTRACE_O_TRACESYSGOOD).map_err(|e| {
             TraceError::PtraceError {
                 call: "SETOPTIONS",
                 reason: e,
             }
         })?;
 
-        // execute loop that examines through syscalls
-        loop {
-            match self.step() {
-                Ok(Some(status)) => {
-                    if status == 0 {
-                        break;
-                    } else {
-                    }
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    return Err(TraceError::StepError {
-                        pid: self.pid,
+        match wait::waitpid(Pid::from_raw(-1), None) {
+            Ok(wait::WaitStatus::Stopped(pid, Signal::SIGUSR1)) => {
+                let _ = ptrace::step(pid, None);
+            },
+            Err(e) => {
+                return Err(TraceError::StepError {
+                        pid: i32::from(pid),
                         reason: e.to_string(),
                     });
-                }
-            }
+            },
+            _ => {}
         }
         Ok(self.manager.clone())
     }
 
+    /*
     /// Introspect single event in traced process, using ptrace to parse out syscall registers for output.
     fn step(&mut self) -> Result<Option<c_int>, TraceError> {
-        helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
+        helpers::syscall(pid).map_err(|e| TraceError::PtraceError {
             call: "SYSCALL",
             reason: e,
         })?;
@@ -117,7 +111,7 @@ impl Tracer {
         self.manager.add_syscall(syscall_num, args).unwrap();
         //.map_err(SyscallError)?;
 
-        helpers::syscall(self.pid).map_err(|e| TraceError::PtraceError {
+        helpers::syscall(pid).map_err(|e| TraceError::PtraceError {
             call: "SYSCALL",
             reason: e,
         })?;
@@ -132,7 +126,7 @@ impl Tracer {
     fn wait(&self) -> Option<c_int> {
         let mut status = 0;
         unsafe {
-            libc::waitpid(self.pid, &mut status, 0);
+            libc::waitpid(pid, &mut status, 0);
 
             // error-check status set
             if libc::WIFEXITED(status) {
@@ -169,7 +163,7 @@ impl Tracer {
         */
 
         let regval: i64 =
-            helpers::peek_user(self.pid, offset).map_err(|e| TraceError::PtraceError {
+            helpers::peek_user(pid, offset).map_err(|e| TraceError::PtraceError {
                 call: "PEEKUSER",
                 reason: e,
             })?;
@@ -179,7 +173,7 @@ impl Tracer {
     /// Use ptrace with PEEKTEXT in order to read out contents for a specified address.
     fn read_arg(&mut self, addr: u64) -> Result<u64, TraceError> {
         let argval: i64 =
-            helpers::peek_text(self.pid, addr as usize).map_err(|e| TraceError::PtraceError {
+            helpers::peek_text(pid, addr as usize).map_err(|e| TraceError::PtraceError {
                 call: "PEEKTEXT",
                 reason: e,
             })?;
@@ -189,10 +183,11 @@ impl Tracer {
     /// Use ptrace with PEEKUSER to return the syscall num from ORIG_RAX.
     fn get_syscall_num(&mut self) -> Result<u64, TraceError> {
         let num: i64 =
-            helpers::peek_user(self.pid, regs::ORIG_RAX).map_err(|e| TraceError::PtraceError {
+            helpers::peek_user(pid, regs::ORIG_RAX).map_err(|e| TraceError::PtraceError {
                 call: "PEEKUSER",
                 reason: e,
             })?;
         Ok(num as u64)
     }
+    */
 }
