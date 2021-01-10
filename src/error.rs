@@ -35,10 +35,6 @@ pub enum TraceError {
     },
     PtraceError {
         call: &'static str,
-        reason: IOError,
-    },
-    ProbeError {
-        tracepoint: &'static str,
         reason: String,
     },
 }

@@ -2,7 +2,6 @@
 //! wrappers to the `trace` submodule in order to allow convenient tracing.
 
 use nix::sys::ptrace::{self, Options};
-use nix::sys::signal::Signal;
 use nix::sys::wait;
 use nix::unistd::Pid;
 
@@ -11,8 +10,23 @@ use unshare::{Command, Namespace};
 use crate::error::TraceError;
 use crate::syscall::SyscallManager;
 
+use std::io::{Error, ErrorKind};
+
+
+// Helper wrapper over nix's ptrace TRACEME function, in order to ensure proper type conversion for
+// its error type.
+#[inline]
+fn traceme() -> Result<(), Error> {
+    match ptrace::traceme() {
+        Err(nix::Error::Sys(errno)) => Err(Error::from_raw_os_error(errno as i32)),
+        Err(e) => Err(Error::new(ErrorKind::Other, e)),
+        _ => Ok(())
+    }
+}
+
 /// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
+    pid: Pid,
     manager: SyscallManager,
 }
 
@@ -26,6 +40,7 @@ impl Default for Tracer {
 impl Tracer {
     pub fn new() -> Self {
         Self {
+            pid: Pid::from_raw(-1),
             manager: SyscallManager::new(),
         }
     }
@@ -47,7 +62,7 @@ impl Tracer {
 
         // call traceme helper to signal parent for tracing
         unsafe {
-            cmd.pre_exec(ptrace::traceme);
+            cmd.pre_exec(traceme);
         }
 
         // spawns a child process handler
@@ -65,35 +80,69 @@ impl Tracer {
         ptrace::setoptions(pid, Options::PTRACE_O_TRACESYSGOOD).map_err(|e| {
             TraceError::PtraceError {
                 call: "SETOPTIONS",
-                reason: e,
+                reason: e.to_string(),
             }
         })?;
 
-        match wait::waitpid(Pid::from_raw(-1), None) {
-            Ok(wait::WaitStatus::Stopped(pid, Signal::SIGUSR1)) => {
-                let _ = ptrace::step(pid, None);
-            },
+        // save pid state for later use
+        self.pid = pid;
+
+        // wait for process to change execution state
+        match wait::waitpid(self.pid, None) {
             Err(e) => {
                 return Err(TraceError::StepError {
-                        pid: i32::from(pid),
+                        pid: i32::from(self.pid),
                         reason: e.to_string(),
                     });
             },
             _ => {}
         }
+
+        // run loop until broken by end of execution
+        loop {
+            match self.step() {
+                Ok(Some(status)) => {
+                    // break if successfully completed execution
+                    if status == 0 { break; }
+                },
+                Err(e) => {
+                    return Err(e);
+                },
+                _ => {}
+            }
+        }
+
+        // once the system call manager is populated return
         Ok(self.manager.clone())
     }
 
-    /*
+
     /// Introspect single event in traced process, using ptrace to parse out syscall registers for output.
-    fn step(&mut self) -> Result<Option<c_int>, TraceError> {
-        helpers::syscall(pid).map_err(|e| TraceError::PtraceError {
+    fn step(&mut self) -> Result<Option<i32>, TraceError> {
+
+        // encounter SYSCALL_ENTER
+        ptrace::syscall(self.pid, None).map_err(|e| TraceError::PtraceError {
             call: "SYSCALL",
-            reason: e,
+            reason: e.to_string(),
         })?;
 
-        if let Some(status) = self.wait() {
-            return Ok(Some(status));
+
+        // wait for status, return status if finished execution
+        match wait::waitpid(self.pid, None) {
+            Ok(status) => {
+                if let wait::WaitStatus::Exited(_, stat) = status {
+                    return Ok(Some(stat));
+                } else {
+                    return Ok(None);
+                }
+            },
+            Err(e) => {
+                return Err(TraceError::StepError {
+                    pid: i32::from(self.pid),
+                    reason: e.to_string(),
+                });
+            },
+            _ => {}
         }
 
         // determine syscall number and initialize
@@ -109,32 +158,32 @@ impl Tracer {
 
         // add syscall to manager
         self.manager.add_syscall(syscall_num, args).unwrap();
-        //.map_err(SyscallError)?;
 
-        helpers::syscall(pid).map_err(|e| TraceError::PtraceError {
+        // encounter SYSCALL_EXIT
+        ptrace::syscall(self.pid, None).map_err(|e| TraceError::PtraceError {
             call: "SYSCALL",
-            reason: e,
+            reason: e.to_string(),
         })?;
 
-        if let Some(status) = self.wait() {
-            return Ok(Some(status));
+        // wait for status, return status if finished execution
+        match wait::waitpid(self.pid, None) {
+            Ok(status) => {
+                if let wait::WaitStatus::Exited(_, stat) = status {
+                    return Ok(Some(stat));
+                } else {
+                    return Ok(None);
+                }
+            },
+            Err(e) => {
+                return Err(TraceError::StepError {
+                    pid: i32::from(self.pid),
+                    reason: e.to_string(),
+                });
+            },
+            _ => {}
         }
+
         Ok(None)
-    }
-
-    /// Libc wrapper to waitpid/wait4, with error-checking in order to return proper type back to developer.
-    fn wait(&self) -> Option<c_int> {
-        let mut status = 0;
-        unsafe {
-            libc::waitpid(pid, &mut status, 0);
-
-            // error-check status set
-            if libc::WIFEXITED(status) {
-                Some(libc::WEXITSTATUS(status))
-            } else {
-                None
-            }
-        }
     }
 
     /// Introspect current process states register values in order to determine syscall and arguments passed.
@@ -150,22 +199,10 @@ impl Tracer {
             _ => panic!("Unmatched argument offset"),
         };
 
-        /* TODO: register values for 32bit registers
-        match reg {
-            0 => regs::EBX,
-            1 => regs::ECX,
-            2 => regs::EDX,
-            3 => regs::ESI,
-            4 => regs::EDI,
-            5 => regs::EBP,
-            _ => panic!("Unmatched argument offset")
-        }
-        */
-
         let regval: i64 =
-            helpers::peek_user(pid, offset).map_err(|e| TraceError::PtraceError {
+            helpers::peek_user(self.pid, offset).map_err(|e| TraceError::PtraceError {
                 call: "PEEKUSER",
-                reason: e,
+                reason: e.to_string(),
             })?;
         Ok(regval as u64)
     }
@@ -175,7 +212,7 @@ impl Tracer {
         let argval: i64 =
             helpers::peek_text(pid, addr as usize).map_err(|e| TraceError::PtraceError {
                 call: "PEEKTEXT",
-                reason: e,
+                reason: e.to_string(),
             })?;
         Ok(argval as u64)
     }
@@ -185,9 +222,8 @@ impl Tracer {
         let num: i64 =
             helpers::peek_user(pid, regs::ORIG_RAX).map_err(|e| TraceError::PtraceError {
                 call: "PEEKUSER",
-                reason: e,
+                reason: e.to_string(),
             })?;
         Ok(num as u64)
     }
-    */
 }
