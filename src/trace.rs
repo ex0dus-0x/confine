@@ -1,26 +1,27 @@
 //! Defines modes of operation for syscall and library tracing. Provides several interfaces and
 //! wrappers to the `trace` submodule in order to allow convenient tracing.
-
-use nix::sys::ptrace::{self, Options};
-use nix::sys::wait;
+use nix::sys::{ptrace, wait};
 use nix::unistd::Pid;
+use nix::Error as NixError;
 
+use serde_json::{Value, json};
 use unshare::{Command, Namespace};
+use libc::user_regs_struct;
 
-use crate::error::TraceError;
+use std::io::Error as IOError;
+use std::collections::HashMap;
+
 use crate::syscall::SyscallManager;
-
-use std::io::{Error, ErrorKind};
-
 
 // Helper wrapper over nix's ptrace TRACEME function, in order to ensure proper type conversion for
 // its error type.
 #[inline]
-fn traceme() -> Result<(), Error> {
+fn traceme() -> Result<(), IOError> {
+    use std::io::ErrorKind;
     match ptrace::traceme() {
-        Err(nix::Error::Sys(errno)) => Err(Error::from_raw_os_error(errno as i32)),
-        Err(e) => Err(Error::new(ErrorKind::Other, e)),
-        _ => Ok(())
+        Err(nix::Error::Sys(errno)) => Err(IOError::from_raw_os_error(errno as i32)),
+        Err(e) => Err(IOError::new(ErrorKind::Other, e)),
+        _ => Ok(()),
     }
 }
 
@@ -36,12 +37,11 @@ impl Default for Tracer {
     }
 }
 
-
 impl Tracer {
     pub fn new() -> Self {
         Self {
             pid: Pid::from_raw(-1),
-            manager: SyscallManager::new(),
+            manager: SyscallManager::new().unwrap(),
         }
     }
 
@@ -49,7 +49,7 @@ impl Tracer {
     //fn handle_rules(&mut self, rule_map)
 
     /// Runs a trace by forking child process, and uses parent to step through syscall events.
-    pub fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, TraceError> {
+    pub fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, NixError> {
         // create new unshare-wrapped command with arguments
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().skip(1) {
@@ -69,46 +69,32 @@ impl Tracer {
         let child = match cmd.spawn() {
             Ok(handler) => handler,
             Err(_) => {
-                return Err(TraceError::SpawnError {
-                    reason: "Failed to spawn child process".to_string(),
-                });
+                return Err(NixError::last());
             }
         };
 
         // create nix Pid and set options before stepping
         let pid: Pid = Pid::from_raw(child.pid());
-        ptrace::setoptions(pid, Options::PTRACE_O_TRACESYSGOOD).map_err(|e| {
-            TraceError::PtraceError {
-                call: "SETOPTIONS",
-                reason: e.to_string(),
-            }
-        })?;
+        ptrace::setoptions(pid, ptrace::Options::PTRACE_O_TRACESYSGOOD)?;
 
         // save pid state for later use
         self.pid = pid;
 
         // wait for process to change execution state
-        match wait::waitpid(self.pid, None) {
-            Err(e) => {
-                return Err(TraceError::StepError {
-                        pid: i32::from(self.pid),
-                        reason: e.to_string(),
-                    });
-            },
-            _ => {}
-        }
+        wait::waitpid(self.pid, None)?;
 
         // run loop until broken by end of execution
         loop {
             match self.step() {
-                Ok(Some(status)) => {
+                Ok(status) => {
                     // break if successfully completed execution
-                    if status == 0 { break; }
-                },
+                    if status == 0 {
+                        break;
+                    }
+                }
                 Err(e) => {
                     return Err(e);
-                },
-                _ => {}
+                }
             }
         }
 
@@ -116,114 +102,149 @@ impl Tracer {
         Ok(self.manager.clone())
     }
 
+    /// Helper that returns the register content given register state and calling convention index.
+    #[inline]
+    fn get_reg_idx(state: user_regs_struct, idx: i32) -> u64 {
+        match idx {
+            0 => state.rdi,
+            1 => state.rsi,
+            2 => state.rdx,
+            3 => state.rcx,
+            4 => state.r8,
+            5 => state.r9,
+            _ => u64::MAX,
+        }
+    }
+
+
+    /// Helper that parses a register value based on the corresponding type for it, and returns a
+    /// genericized `serde_json::Value` to store back into the manager.
+    fn parse_type(&mut self, typename: &str, regval: u64) -> Value {
+
+        // return any type of numeric value without reading further
+        let numerics: Vec<&str> = vec![
+            "int",
+            "unsigned int",
+            "long",
+            "unsigned long",
+            "short",
+            "unsigned short",
+
+            // aliases
+            "size_t",
+            "pid_t",
+            "gid_t",
+            "qid_t",
+            "uid_t",
+            "key_t",
+            "time_t",
+            "clockid_t",
+            "umode_t",
+            "sigset_t",
+            "mqd_t",
+            "key_serial_t",
+            "rwf_t",
+            "off_t",
+            "loff_t",
+        ];
+        if numerics.iter().any(|&i| typename.contains(i)) {
+            return json!(regval);
+        }
+
+        // known aliases to structs
+        // since parsing data structures is a lot of work, just store hex address
+        let structs: Vec<&str> = vec![
+            "cap_user_header_t",
+            "cap_user_data_t",
+            "siginfo_t",
+            "aio_context_t",
+        ];
+        if structs.iter().any(|&i| typename.contains(i)) || typename.contains("struct") {
+            return json!(format!("0x{:x}", regval));
+        }
+
+        // if a char buffer, use ptrace to read from address stored in register
+        if typename.contains("char") {
+
+            /* TODO
+            // instantiate buffer to store contents from read
+            let mut buffer: Vec<i64> = Vec::new();
+            let mut val: i64 = -1;
+            let mut cnt: u64 = 0;
+
+            // loop until null terminating character
+            while val != 48 {
+                val = ptrace::read(self.pid, (regval + cnt) as *mut libc::c_void).unwrap();
+                buffer.push(val);
+                cnt += 2;
+            }*/
+            return json!(format!("0x{:x}", regval));
+        }
+
+        // default if type cannot be parsed out
+        json!("UNKNOWN")
+    }
 
     /// Introspect single event in traced process, using ptrace to parse out syscall registers for output.
-    fn step(&mut self) -> Result<Option<i32>, TraceError> {
-
+    fn step(&mut self) -> Result<i32, NixError> {
         // encounter SYSCALL_ENTER
-        ptrace::syscall(self.pid, None).map_err(|e| TraceError::PtraceError {
-            call: "SYSCALL",
-            reason: e.to_string(),
-        })?;
-
+        ptrace::syscall(self.pid, None)?;
 
         // wait for status, return status if finished execution
         match wait::waitpid(self.pid, None) {
             Ok(status) => {
                 if let wait::WaitStatus::Exited(_, stat) = status {
-                    return Ok(Some(stat));
-                } else {
-                    return Ok(None);
+                    return Ok(stat);
                 }
-            },
-            Err(e) => {
-                return Err(TraceError::StepError {
-                    pid: i32::from(self.pid),
-                    reason: e.to_string(),
-                });
-            },
-            _ => {}
+            }
+            Err(e) => return Err(e),
         }
 
-        // determine syscall number and initialize
-        let syscall_num = self.get_syscall_num()?;
+        // get register state as this point
+        let regstate: user_regs_struct = ptrace::getregs(self.pid)?;
 
-        // retrieve first 3 arguments from syscall
-        let mut args: Vec<u64> = Vec::new();
-        for i in 0..2 {
-            let _arg = self.get_arg(i)?;
-            //let arg = self.read_arg(_arg)?;
-            args.push(_arg);
+        // get system call number for ORIG_RAX
+        let syscall_num: u64 = regstate.orig_rax;
+
+        // parse out arguments to read and write based on syscall table
+        // TODO: remove unwrap
+        let to_read: Vec<String> = self.manager.get_arguments(syscall_num).unwrap();
+
+        // for each argument, get corresponding register in calling convention, and parse
+        // accordingly based on the given type
+        let mut args: HashMap<String, Value> = HashMap::new();
+        for (idx, arg) in to_read.iter().enumerate() {
+
+            // get contents of register in calling convention by index
+            let regval: u64 = Tracer::get_reg_idx(regstate, idx as i32);
+            if regval == u64::MAX {
+                panic!("proper error here")
+            }
+
+            // get type and decide if further reading is necessary
+            let val: Value = self.parse_type(arg.as_str(), regval);
+
+            // commit type and value mapping to hashmap
+            args.insert(arg.to_string(), val);
         }
 
         // add syscall to manager
         self.manager.add_syscall(syscall_num, args).unwrap();
 
         // encounter SYSCALL_EXIT
-        ptrace::syscall(self.pid, None).map_err(|e| TraceError::PtraceError {
-            call: "SYSCALL",
-            reason: e.to_string(),
-        })?;
+        ptrace::syscall(self.pid, None)?;
 
         // wait for status, return status if finished execution
         match wait::waitpid(self.pid, None) {
             Ok(status) => {
                 if let wait::WaitStatus::Exited(_, stat) = status {
-                    return Ok(Some(stat));
-                } else {
-                    return Ok(None);
+                    return Ok(stat);
                 }
-            },
+            }
             Err(e) => {
-                return Err(TraceError::StepError {
-                    pid: i32::from(self.pid),
-                    reason: e.to_string(),
-                });
-            },
-            _ => {}
+                return Err(e);
+            }
         }
-
-        Ok(None)
-    }
-
-    /// Introspect current process states register values in order to determine syscall and arguments passed.
-    fn get_arg(&mut self, reg: u8) -> Result<u64, TraceError> {
-        #[cfg(target_arch = "x86_64")]
-        let offset = match reg {
-            0 => regs::RDI,
-            1 => regs::RSI,
-            2 => regs::RDX,
-            3 => regs::RCX,
-            4 => regs::R8,
-            5 => regs::R9,
-            _ => panic!("Unmatched argument offset"),
-        };
-
-        let regval: i64 =
-            helpers::peek_user(self.pid, offset).map_err(|e| TraceError::PtraceError {
-                call: "PEEKUSER",
-                reason: e.to_string(),
-            })?;
-        Ok(regval as u64)
-    }
-
-    /// Use ptrace with PEEKTEXT in order to read out contents for a specified address.
-    fn read_arg(&mut self, addr: u64) -> Result<u64, TraceError> {
-        let argval: i64 =
-            helpers::peek_text(pid, addr as usize).map_err(|e| TraceError::PtraceError {
-                call: "PEEKTEXT",
-                reason: e.to_string(),
-            })?;
-        Ok(argval as u64)
-    }
-
-    /// Use ptrace with PEEKUSER to return the syscall num from ORIG_RAX.
-    fn get_syscall_num(&mut self) -> Result<u64, TraceError> {
-        let num: i64 =
-            helpers::peek_user(pid, regs::ORIG_RAX).map_err(|e| TraceError::PtraceError {
-                call: "PEEKUSER",
-                reason: e.to_string(),
-            })?;
-        Ok(num as u64)
+        Ok(-1)
     }
 }

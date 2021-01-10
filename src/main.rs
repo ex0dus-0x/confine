@@ -39,9 +39,11 @@ impl TraceProc {
 
     /// Takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
     /// we can preemptively output the trace as well, in the case the user only wants a trace.
-    pub fn run_trace(&mut self, args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    pub fn run_trace(&mut self, args: Vec<String>, trace_only: bool) -> Result<(), Box<dyn Error>> {
         let table = Some(self.tracer.trace(args)?);
-        println!("{}", table.unwrap().json_out()?);
+        if trace_only {
+            println!("{}", table.unwrap().json_out()?);
+        }
         Ok(())
     }
 }
@@ -79,15 +81,16 @@ fn main() {
     let args: Vec<String> = _args.iter().map(|s| s.to_string()).collect();
 
     // parse out policy generation options
-    let policy_path: Option<PathBuf> = matches
-        .value_of("policy_path")
-        .map(|p| PathBuf::from(p));
+    let policy_path: Option<PathBuf> = matches.value_of("policy_path").map(|p| PathBuf::from(p));
 
     // initialize TraceProc interface
     let mut proc = TraceProc::new(policy_path);
 
+    // check if we are only running a simple trace
+    let trace_only: bool = matches.is_present("trace_only");
+
     // run trace depending on arguments specified
-    if let Err(e) = proc.run_trace(args) {
+    if let Err(e) = proc.run_trace(args, trace_only) {
         eprintln!("confine exception: {:?}", e);
     }
 }

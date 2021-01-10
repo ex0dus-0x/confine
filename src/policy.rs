@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use crate::syscall::{Syscall, SyscallAction, SyscallGroup, SyscallManager};
+use crate::syscall::{Syscall, SyscallAction, SyscallGroup};
 
 // a type alias for a hashmap that provides a one-to-one mapping between syscall IDs and
 // action to perform.
@@ -21,7 +21,6 @@ type PolicyMap = HashMap<u64, SyscallAction>;
 pub enum SyscallType {
     Syscall(Syscall),
     Group(SyscallGroup),
-    // .. TODO: other ways to identify syscalls
 }
 
 /// Deserializable wrapper around a syscall rule that gets added to our policy map.
@@ -60,39 +59,9 @@ impl PolicyInterface {
         Ok(Self(Self::gen_policy_map(policy)))
     }
 
-    /// `gen_policy_map` is a helper that takes a parsed `Policy` and creates a
-    /// HashMap mapping id values to enforced rules
+    // TODO
     fn gen_policy_map(policy: Policy) -> PolicyMap {
         let mut map: PolicyMap = PolicyMap::new();
-
-        // initialize a temporary syscall table for conversion reference
-        // TODO: refactor to make this unnecessary
-        let table = SyscallManager::parse_syscall_table().unwrap();
-
-        if policy.rules.is_none() {
-            return map;
-        } else if let Some(_rules) = policy.rules {
-            let _ = _rules.iter().map(|rule| {
-                match &rule.syscall {
-                    SyscallType::Syscall(s) => {
-                        map.insert(
-                            {
-                                if let Some(e) = table.iter().find(|(_, v)| v == &&s.name) {
-                                    *e.0
-                                } else {
-                                    panic!("Cannot find syscall");
-                                }
-                            },
-                            rule.action.clone(),
-                        );
-                    }
-                    SyscallType::Group(_g) => {
-                        //map.insert(g, rule.action);
-                        unimplemented!();
-                    }
-                }
-            });
-        }
         map
     }
 }
