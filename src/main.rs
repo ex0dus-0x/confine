@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use clap::{App, Arg};
 
-use confine::policy::PolicyInterface;
+use confine::policy::Policy;
 use confine::trace::Tracer;
 
 /// Provides an interface for initializing and interacting with a specified PID. It implements
@@ -14,15 +14,15 @@ use confine::trace::Tracer;
 #[derive(Default)]
 struct TraceProc {
     tracer: Tracer,
-    policy: Option<PolicyInterface>,
+    policy: Option<Policy>,
 }
 
 impl TraceProc {
     /// Initialize a new TraceProc interface with default attributes for use with builder methods
     pub fn new(_policy: Option<PathBuf>) -> Self {
         // instantiates policy interface if file is given
-        let policy: Option<PolicyInterface> = match _policy {
-            Some(pol) => match PolicyInterface::new_policy(pol) {
+        let policy: Option<Policy> = match _policy {
+            Some(pol) => match Policy::new(pol) {
                 Ok(p) => Some(p),
                 Err(_) => None,
             },
@@ -35,14 +35,14 @@ impl TraceProc {
         }
     }
 
-    // TODO: deal with policy
-
     /// Takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
     /// we can preemptively output the trace as well, in the case the user only wants a trace.
     pub fn run_trace(&mut self, args: Vec<String>, trace_only: bool) -> Result<(), Box<dyn Error>> {
-        let table = Some(self.tracer.trace(args)?);
+        self.tracer.trace(args)?;
         if trace_only {
-            println!("{}", table.unwrap().json_out()?);
+            println!("{}", self.tracer.normal_trace()?);
+        } else {
+            println!("{}", self.tracer.threat_trace()?);
         }
         Ok(())
     }
@@ -69,7 +69,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("trace_only")
-                .help("Run only a standard trace against syscalls")
+                .help("Run only a standard trace against syscalls, and output JSONified trace.")
                 .short("t")
                 .long("trace_only")
                 .required(false),
@@ -81,6 +81,7 @@ fn main() {
     let args: Vec<String> = _args.iter().map(|s| s.to_string()).collect();
 
     // parse out policy generation options
+    #[allow(clippy::redundant_closure)]
     let policy_path: Option<PathBuf> = matches.value_of("policy_path").map(|p| PathBuf::from(p));
 
     // initialize TraceProc interface

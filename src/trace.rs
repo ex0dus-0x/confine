@@ -1,20 +1,21 @@
 //! Defines modes of operation for syscall and library tracing. Provides several interfaces and
 //! wrappers to the `trace` submodule in order to allow convenient tracing.
 use nix::sys::{ptrace, wait};
-use nix::unistd::Pid;
+use nix::unistd::{self, Pid};
 use nix::Error as NixError;
 
-use serde_json::{Value, json};
-use unshare::{Command, Namespace};
 use libc::user_regs_struct;
+use unshare::{Command, Namespace};
 
-use std::io::Error as IOError;
+use serde::Serialize;
+use serde_json::{json, Value};
+
 use std::collections::HashMap;
+use std::io::Error as IOError;
 
 use crate::syscall::SyscallManager;
 
-// Helper wrapper over nix's ptrace TRACEME function, in order to ensure proper type conversion for
-// its error type.
+/// Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
 #[inline]
 fn traceme() -> Result<(), IOError> {
     use std::io::ErrorKind;
@@ -25,10 +26,28 @@ fn traceme() -> Result<(), IOError> {
     }
 }
 
+/// Defines a serializable threat report that is returned to the user by default if not specified
+#[derive(Serialize, Default)]
+pub struct ThreatReport {
+    // stores only the system call names that are encountered
+    calls: Vec<String>,
+
+    // stores network addresses that are encountered
+    networking: Vec<String>,
+
+    // maps file I/O interactions
+    file_io: HashMap<String, String>,
+
+    // external commands executed
+    commands: Vec<String>,
+}
+
 /// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
     pid: Pid,
+    namespaces: Vec<Namespace>,
     manager: SyscallManager,
+    report: ThreatReport,
 }
 
 impl Default for Tracer {
@@ -38,27 +57,47 @@ impl Default for Tracer {
 }
 
 impl Tracer {
+    /// Instantiates a new `Tracer` capable of dynamically tracing a process under a containerized
+    /// environment, and enforcing policy rules.
     pub fn new() -> Self {
+        let namespaces = vec![
+            Namespace::User,
+            Namespace::Cgroup,
+            Namespace::Pid,
+            Namespace::Ipc,
+        ];
         Self {
             pid: Pid::from_raw(-1),
+            namespaces,
             manager: SyscallManager::new().unwrap(),
+            report: ThreatReport::default(),
         }
     }
 
-    // TODO: implement `handle_rules()` to block system calls (or report them)
-    //fn handle_rules(&mut self, rule_map)
+    /// Helper that instantiates a containerized environment before the execution of the actual
+    /// child process.
+    fn init_container_env(&mut self) -> Result<(), NixError> {
+        // created isolated namespace by unsharing namespaces
+
+        // initialize cgroup
+
+        // sets the hostname for the new isolated process
+        unistd::sethostname("confine")?;
+
+        // mount rootfs
+        todo!()
+    }
 
     /// Runs a trace by forking child process, and uses parent to step through syscall events.
-    pub fn trace(&mut self, args: Vec<String>) -> Result<SyscallManager, NixError> {
+    pub fn trace(&mut self, args: Vec<String>) -> Result<(), NixError> {
         // create new unshare-wrapped command with arguments
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().skip(1) {
             cmd.arg(arg);
         }
 
-        // initialize with unshared namespaces for container-like environment
-        let namespaces = vec![Namespace::User, Namespace::Cgroup];
-        cmd.unshare(&namespaces);
+        // unshare specified namespaces before execution
+        cmd.unshare(&self.namespaces);
 
         // call traceme helper to signal parent for tracing
         unsafe {
@@ -98,11 +137,12 @@ impl Tracer {
             }
         }
 
-        // once the system call manager is populated return
-        Ok(self.manager.clone())
+        // TODO: unmount the rootfs partition
+        Ok(())
     }
 
     /// Helper that returns the register content given register state and calling convention index.
+    /// TODO: return calling convention if executable is anothe architecture.
     #[inline]
     fn get_reg_idx(state: user_regs_struct, idx: i32) -> u64 {
         match idx {
@@ -116,12 +156,11 @@ impl Tracer {
         }
     }
 
-
     /// Helper that parses a register value based on the corresponding type for it, and returns a
     /// genericized `serde_json::Value` to store back into the manager.
-    fn parse_type(&mut self, typename: &str, regval: u64) -> Value {
-
-        // return any type of numeric value without reading further
+    fn parse_type(&mut self, typename: &str, mut regval: u64) -> Result<Value, NixError> {
+        // if type is a numeric value, return the register value as is without reading from memory
+        // any further. TODO: unsigned and signed distinction and casting.
         let numerics: Vec<&str> = vec![
             "int",
             "unsigned int",
@@ -129,7 +168,6 @@ impl Tracer {
             "unsigned long",
             "short",
             "unsigned short",
-
             // aliases
             "size_t",
             "pid_t",
@@ -148,41 +186,43 @@ impl Tracer {
             "loff_t",
         ];
         if numerics.iter().any(|&i| typename.contains(i)) {
-            return json!(regval);
+            return Ok(json!(regval));
         }
 
         // known aliases to structs
-        // since parsing data structures is a lot of work, just store hex address
         let structs: Vec<&str> = vec![
             "cap_user_header_t",
             "cap_user_data_t",
             "siginfo_t",
             "aio_context_t",
         ];
+
+        // since parsing data structures is a lot of work, just store hex address
         if structs.iter().any(|&i| typename.contains(i)) || typename.contains("struct") {
-            return json!(format!("0x{:x}", regval));
+            return Ok(json!(format!("0x{:x}", regval)));
         }
 
         // if a char buffer, use ptrace to read from address stored in register
         if typename.contains("char") {
-
-            /* TODO
             // instantiate buffer to store contents from read
-            let mut buffer: Vec<i64> = Vec::new();
-            let mut val: i64 = -1;
-            let mut cnt: u64 = 0;
-
-            // loop until null terminating character
-            while val != 48 {
-                val = ptrace::read(self.pid, (regval + cnt) as *mut libc::c_void).unwrap();
-                buffer.push(val);
-                cnt += 2;
-            }*/
-            return json!(format!("0x{:x}", regval));
+            let mut buffer: Vec<u8> = Vec::new();
+            loop {
+                let word = nix::sys::ptrace::read(self.pid, regval as *mut libc::c_void)? as u32;
+                let bytes: [u8; 4] = unsafe { std::mem::transmute(word) };
+                for byte in bytes.iter() {
+                    // break when encountering null byte, or append to buffer
+                    if *byte == 0 {
+                        return Ok(json!(std::str::from_utf8(&buffer).unwrap()));
+                    }
+                    buffer.push(*byte);
+                }
+                // increment to read next word
+                regval += 4;
+            }
         }
 
-        // default if type cannot be parsed out
-        json!("UNKNOWN")
+        // by default, return memory address if type cannot be parsed out
+        Ok(json!(format!("0x{:x}", regval)))
     }
 
     /// Introspect single event in traced process, using ptrace to parse out syscall registers for output.
@@ -207,22 +247,20 @@ impl Tracer {
         let syscall_num: u64 = regstate.orig_rax;
 
         // parse out arguments to read and write based on syscall table
-        // TODO: remove unwrap
         let to_read: Vec<String> = self.manager.get_arguments(syscall_num).unwrap();
 
         // for each argument, get corresponding register in calling convention, and parse
         // accordingly based on the given type
         let mut args: HashMap<String, Value> = HashMap::new();
         for (idx, arg) in to_read.iter().enumerate() {
-
             // get contents of register in calling convention by index
             let regval: u64 = Tracer::get_reg_idx(regstate, idx as i32);
             if regval == u64::MAX {
-                panic!("proper error here")
+                return Err(NixError::invalid_argument());
             }
 
             // get type and decide if further reading is necessary
-            let val: Value = self.parse_type(arg.as_str(), regval);
+            let val: Value = self.parse_type(arg.as_str(), regval)?;
 
             // commit type and value mapping to hashmap
             args.insert(arg.to_string(), val);
@@ -246,5 +284,16 @@ impl Tracer {
             }
         }
         Ok(-1)
+    }
+
+    /// Generates a JSONified dump of the full trace, including arguments.
+    pub fn normal_trace(&self) -> serde_json::Result<String> {
+        serde_json::to_string_pretty(&self.manager)
+    }
+
+    /// Generates a dump of the trace excluding arguments and including varying capabilities
+    /// for detecting potential IOCs
+    pub fn threat_trace(&self) -> serde_json::Result<String> {
+        unimplemented!()
     }
 }
