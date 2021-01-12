@@ -314,9 +314,8 @@ impl Tracer {
                         Action::Permit => {}
                     }
                 }
-                None => {
-                    return Err(NixError::invalid_argument());
-                }
+                // continue if no action specified
+                None => {}
             };
         }
 

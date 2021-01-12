@@ -20,12 +20,28 @@ pub enum SyscallType {
 
 /// Declares an action parsed by the userspace application and applied to
 /// system calls before trace.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum Action {
     Permit, // enable execution of system call
     Warn,   // warns user through STDOUT, but continue trace
     Block,  // SIGINT to trace execution when encountering call
     Log,    // log syscall execution to log
+}
+
+impl<'de> Deserialize<'de> for Action {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw: String = Deserialize::deserialize(deserializer)?;
+        let action: Self = match raw.as_str() {
+            "Warn" | "WARN" => Action::Warn,
+            "Block" | "BLOCK" => Action::Block,
+            "Log" | "LOG" => Action::Log,
+            "Permit" | "PERMIT" | _ => Action::Permit,
+        };
+        Ok(action)
+    }
 }
 
 /// Wrapper around a syscall rule that gets added to our policy map.
@@ -54,7 +70,7 @@ impl Policy {
     pub fn get_enforcement(&self, syscall: &String) -> Option<Action> {
         self.rules
             .iter()
-            .find(|rule| rule.name == *syscall)
+            .find(|rule| &rule.syscall == syscall)
             .map(|rule| rule.action.clone())
     }
 

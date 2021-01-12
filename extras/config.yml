@@ -2,12 +2,12 @@ logpath: test.log
 rules:
   - name: Open block rule
     syscall: openat
-    action: WARN
+    action: Warn
 
   - name: Close block rule
     syscall: close
-    action: LOG
+    action: Log
 
   - name: Exit group block rule
     syscall: exit_group
-    action: BLOCK
+    action: Block
