@@ -9,43 +9,27 @@ use clap::{App, Arg};
 use confine::policy::Policy;
 use confine::trace::Tracer;
 
-/// Provides an interface for initializing and interacting with a specified PID. It implements
-/// internal controls and establishes helpers for syscalls that are needed for tracer/tracee interactions.
-#[derive(Default)]
-struct TraceProc {
-    tracer: Tracer,
+/// Takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
+/// we can preemptively output the trace as well, in the case the user only wants a trace.
+fn run_trace(
+    args: Vec<String>,
     policy: Option<Policy>,
-}
+    trace_only: bool,
+) -> Result<(), Box<dyn Error>> {
+    // instantiate a new dynamic tracer, optionally with a policy path
+    let mut tracer: Tracer = Tracer::new(args, policy);
 
-impl TraceProc {
-    /// Initialize a new TraceProc interface with default attributes for use with builder methods
-    pub fn new(_policy: Option<PathBuf>) -> Self {
-        // instantiates policy interface if file is given
-        let policy: Option<Policy> = match _policy {
-            Some(pol) => match Policy::new(pol) {
-                Ok(p) => Some(p),
-                Err(_) => None,
-            },
-            None => None,
-        };
+    // execute trace with the given executable
+    tracer.trace()?;
 
-        Self {
-            tracer: Tracer::new(),
-            policy,
-        }
+    // output a normal but full trace if `trace_only` is specified, otherwise give a briefer trace
+    // but with threat analytics
+    if trace_only {
+        println!("{}", tracer.normal_trace()?);
+    } else {
+        println!("{}", tracer.threat_trace()?);
     }
-
-    /// Takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
-    /// we can preemptively output the trace as well, in the case the user only wants a trace.
-    pub fn run_trace(&mut self, args: Vec<String>, trace_only: bool) -> Result<(), Box<dyn Error>> {
-        self.tracer.trace(args)?;
-        if trace_only {
-            println!("{}", self.tracer.normal_trace()?);
-        } else {
-            println!("{}", self.tracer.threat_trace()?);
-        }
-        Ok(())
-    }
+    Ok(())
 }
 
 fn main() {
@@ -80,18 +64,26 @@ fn main() {
     let _args: Vec<&str> = matches.values_of("COMMAND").unwrap().collect::<Vec<&str>>();
     let args: Vec<String> = _args.iter().map(|s| s.to_string()).collect();
 
+    // TODO: canonicalize the actual application, unshare only supports abspaths and not $PATH
+
     // parse out policy generation options
     #[allow(clippy::redundant_closure)]
     let policy_path: Option<PathBuf> = matches.value_of("policy_path").map(|p| PathBuf::from(p));
 
-    // initialize TraceProc interface
-    let mut proc = TraceProc::new(policy_path);
+    // instantiates policy interface if file is given
+    let policy: Option<Policy> = match policy_path {
+        Some(pol) => match Policy::new(pol) {
+            Ok(p) => Some(p),
+            Err(_) => None,
+        },
+        None => None,
+    };
 
     // check if we are only running a simple trace
     let trace_only: bool = matches.is_present("trace_only");
 
     // run trace depending on arguments specified
-    if let Err(e) = proc.run_trace(args, trace_only) {
+    if let Err(e) = run_trace(args, policy, trace_only) {
         eprintln!("confine exception: {:?}", e);
     }
 }

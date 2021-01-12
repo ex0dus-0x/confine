@@ -25,20 +25,9 @@ pub enum SyscallGroup {
 }
 */
 
-/// declares an action parsed by the userspace application and applied to
-/// system calls before trace.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum SyscallAction {
-    Permit, // enable execution of system call
-    Warn,   // warns user through STDOUT, but continue trace
-    Block,  // SIGINT to trace execution when encountering call
-    Log,    // log syscall execution to log
-}
-
 /// Represents a single system call definition, including its syscall number, name,
 /// and a vector of argument definitions.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Syscall {
     pub number: u64,
     pub name: String,
@@ -51,6 +40,16 @@ pub struct Syscall {
 pub struct ParsedSyscall {
     pub name: String,
     pub args: HashMap<String, Value>,
+}
+
+impl ParsedSyscall {
+    pub fn new(name: String, args: HashMap<String, Value>) -> Self {
+        Self { name, args }
+    }
+
+    pub fn to_string(&self) -> serde_json::Result<String> {
+        serde_json::to_string_pretty(self)
+    }
 }
 
 /// Defines an interface for parsing and displaying system calls parsed by confine
@@ -105,28 +104,32 @@ impl SyscallManager {
         }
     }
 
+    /// Given a system call number, parse out the name that it corresponds to from the table.
+    pub fn get_syscall_name(&mut self, number: u64) -> Option<String> {
+        self.syscall_table
+            .iter()
+            .find(|syscall| syscall.number == number)
+            .map(|syscall| syscall.name.clone())
+    }
+
     /// Given a syscall number and parsed arguments, instantiate a `ParsedSyscall` and add
-    /// for later consumption and display.
+    /// for later consumption, and return a copy on success.
     pub fn add_syscall(
         &mut self,
         number: u64,
         args: HashMap<String, Value>,
     ) -> Result<(), SyscallError> {
-        // retrieve syscall name
-        let name: String = match self
-            .syscall_table
-            .iter()
-            .find(|syscall| syscall.number == number)
-            .map(|syscall| syscall.name.clone())
-        {
-            Some(res) => res,
+        // get name from number with helper, exit if cannot be found
+        let name = match self.get_syscall_name(number) {
+            Some(name) => name,
             None => {
                 return Err(SyscallError::UnsupportedSyscall { id: number });
             }
         };
 
         // instantiate new ParsedSyscall and push
-        self.syscalls.push(ParsedSyscall { name, args });
+        let parsed: ParsedSyscall = ParsedSyscall::new(name, args);
+        self.syscalls.push(parsed);
         Ok(())
     }
 }

@@ -13,18 +13,8 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::Error as IOError;
 
-use crate::syscall::SyscallManager;
-
-/// Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
-#[inline]
-fn traceme() -> Result<(), IOError> {
-    use std::io::ErrorKind;
-    match ptrace::traceme() {
-        Err(nix::Error::Sys(errno)) => Err(IOError::from_raw_os_error(errno as i32)),
-        Err(e) => Err(IOError::new(ErrorKind::Other, e)),
-        _ => Ok(()),
-    }
-}
+use crate::policy::{Action, Policy};
+use crate::syscall::{ParsedSyscall, SyscallManager};
 
 /// Defines a serializable threat report that is returned to the user by default if not specified
 #[derive(Serialize, Default)]
@@ -44,31 +34,37 @@ pub struct ThreatReport {
 
 /// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
-    pid: Pid,
-    namespaces: Vec<Namespace>,
-    manager: SyscallManager,
-    report: ThreatReport,
-}
+    // generated Command for spawning when actually tracing
+    cmd: Command,
 
-impl Default for Tracer {
-    fn default() -> Self {
-        Self::new()
-    }
+    // encapsulates the `Pid` of the eventually running process
+    pid: Pid,
+
+    // optional policy that is to be enforced upon execution
+    policy: Option<Policy>,
+
+    // interfaces system call representation parsing
+    manager: SyscallManager,
+
+    // generated final report for potential threats and IOCs
+    report: ThreatReport,
 }
 
 impl Tracer {
     /// Instantiates a new `Tracer` capable of dynamically tracing a process under a containerized
     /// environment, and enforcing policy rules.
-    pub fn new() -> Self {
-        let namespaces = vec![
-            Namespace::User,
-            Namespace::Cgroup,
-            Namespace::Pid,
-            Namespace::Ipc,
-        ];
+    pub fn new(args: Vec<String>, policy: Option<Policy>) -> Self {
+        // create new unshare-wrapped command with arguments
+        let mut cmd = Command::new(&args[0]);
+        for arg in args.iter().skip(1) {
+            cmd.arg(arg);
+        }
+
+        // return mostly with default arguments that gets populated
         Self {
+            cmd,
             pid: Pid::from_raw(-1),
-            namespaces,
+            policy,
             manager: SyscallManager::new().unwrap(),
             report: ThreatReport::default(),
         }
@@ -78,6 +74,13 @@ impl Tracer {
     /// child process.
     fn init_container_env(&mut self) -> Result<(), NixError> {
         // created isolated namespace by unsharing namespaces
+        let namespaces = vec![
+            Namespace::User,
+            Namespace::Cgroup,
+            Namespace::Pid,
+            Namespace::Ipc,
+        ];
+        self.cmd.unshare(&namespaces);
 
         // initialize cgroup
 
@@ -88,36 +91,40 @@ impl Tracer {
         todo!()
     }
 
-    /// Runs a trace by forking child process, and uses parent to step through syscall events.
-    pub fn trace(&mut self, args: Vec<String>) -> Result<(), NixError> {
-        // create new unshare-wrapped command with arguments
-        let mut cmd = Command::new(&args[0]);
-        for arg in args.iter().skip(1) {
-            cmd.arg(arg);
+    /// Executes a dynamic `ptrace`-based trace upon the given application specified. Will first
+    /// instantiate a containerized environment with unshared namespaces and a seperately mounted
+    /// filesystem, and then spawn the tracee. If a `Policy` is specified, rules will also be
+    /// enforced.
+    pub fn trace(&mut self) -> Result<(), NixError> {
+        /// Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
+        fn traceme() -> Result<(), IOError> {
+            use std::io::ErrorKind;
+            match ptrace::traceme() {
+                Err(nix::Error::Sys(errno)) => Err(IOError::from_raw_os_error(errno as i32)),
+                Err(e) => Err(IOError::new(ErrorKind::Other, e)),
+                _ => Ok(()),
+            }
         }
-
-        // unshare specified namespaces before execution
-        cmd.unshare(&self.namespaces);
 
         // call traceme helper to signal parent for tracing
         unsafe {
-            cmd.pre_exec(traceme);
+            self.cmd.pre_exec(traceme);
         }
 
         // spawns a child process handler
-        let child = match cmd.spawn() {
+        let child = match self.cmd.spawn() {
             Ok(handler) => handler,
             Err(_) => {
                 return Err(NixError::last());
             }
         };
 
-        // create nix Pid and set options before stepping
-        let pid: Pid = Pid::from_raw(child.pid());
-        ptrace::setoptions(pid, ptrace::Options::PTRACE_O_TRACESYSGOOD)?;
+        // create nix Pid, save state for later use
+        self.pid = Pid::from_raw(child.pid());
 
-        // save pid state for later use
-        self.pid = pid;
+        // configure options to trace for syscall interrupt
+        // TODO: trace forked childrens
+        ptrace::setoptions(self.pid, ptrace::Options::PTRACE_O_TRACESYSGOOD)?;
 
         // wait for process to change execution state
         wait::waitpid(self.pid, None)?;
@@ -142,7 +149,6 @@ impl Tracer {
     }
 
     /// Helper that returns the register content given register state and calling convention index.
-    /// TODO: return calling convention if executable is anothe architecture.
     #[inline]
     fn get_reg_idx(state: user_regs_struct, idx: i32) -> u64 {
         match idx {
@@ -264,6 +270,54 @@ impl Tracer {
 
             // commit type and value mapping to hashmap
             args.insert(arg.to_string(), val);
+        }
+
+        // after parsing, check to see if a policy is configured and if there is a rule that needs
+        // to be enforced upon the system call
+        if let Some(policy) = &self.policy {
+            // get the syscall name
+            let name: String = match self.manager.get_syscall_name(syscall_num) {
+                Some(name) => name,
+                None => {
+                    return Err(NixError::invalid_argument());
+                }
+            };
+
+            // check if name is set as policy, and get enforcement
+            match policy.get_enforcement(&name) {
+                Some(action) => {
+                    // determine what to be done based on the given action
+                    match action {
+                        // print warning with syscall but continue execution
+                        Action::Warn => {
+                            println!("confine: [WARN] encountered syscall {}", name);
+                        }
+
+                        // halt execution immediately and return
+                        Action::Block => {
+                            println!("confine: [BLOCK] encountered syscall {}", name);
+                            return Ok(0);
+                        }
+
+                        // write parsed syscall to log file
+                        Action::Log => {
+                            let parsed_syscall: ParsedSyscall =
+                                ParsedSyscall::new(name, args.clone());
+
+                            // write to log
+                            if let Err(e) = policy.to_log(parsed_syscall) {
+                                return Err(NixError::invalid_argument());
+                            }
+                        }
+
+                        // continue without issue
+                        Action::Permit => {}
+                    }
+                }
+                None => {
+                    return Err(NixError::invalid_argument());
+                }
+            };
         }
 
         // add syscall to manager
