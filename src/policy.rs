@@ -1,12 +1,11 @@
 //! Defines common confine policy format for enforcement. Consumes a configuration which is then
 //! used by confine when tracing to handle call behavior, acting as a dynamic firewall.
-use std::boxed::Box;
-use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
 use serde::Deserialize;
 
+use crate::error::ConfineResult;
 use crate::syscall::ParsedSyscall;
 
 /*
@@ -38,7 +37,7 @@ impl<'de> Deserialize<'de> for Action {
             "Warn" | "WARN" => Action::Warn,
             "Block" | "BLOCK" => Action::Block,
             "Log" | "LOG" => Action::Log,
-            "Permit" | "PERMIT" | _ => Action::Permit,
+            _ => Action::Permit,
         };
         Ok(action)
     }
@@ -61,26 +60,25 @@ pub struct Policy {
 
 impl Policy {
     /// Instantiates a strongly typed `Policy` from a given
-    pub fn new(path: PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn new(path: PathBuf) -> ConfineResult<Self> {
         let contents: String = fs::read_to_string(path)?;
-        serde_yaml::from_str(&contents).map_err(|e| e.into())
+        let yaml = serde_yaml::from_str(&contents)?;
+        Ok(yaml)
     }
 
     /// Checks if a given syscall name is set as a rule, and return action to enforce if found.
-    pub fn get_enforcement(&self, syscall: &String) -> Option<Action> {
+    pub fn get_enforcement(&self, syscall: &str) -> Option<Action> {
         self.rules
             .iter()
-            .find(|rule| &rule.syscall == syscall)
+            .find(|rule| rule.syscall == syscall)
             .map(|rule| rule.action.clone())
     }
 
     /// Enforces a LOG rule by writing to the specified input file the full system call that is
     /// marked to be logged.
-    pub fn to_log(&self, syscall: ParsedSyscall) -> Result<(), Box<dyn Error>> {
+    pub fn to_log(&self, syscall: ParsedSyscall) -> ConfineResult<()> {
         if let Some(path) = &self.logpath {
             fs::write(path, syscall.to_string()?)?;
-        } else {
-            todo!();
         }
         Ok(())
     }

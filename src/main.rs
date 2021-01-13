@@ -84,6 +84,6 @@ fn main() {
 
     // run trace depending on arguments specified
     if let Err(e) = run_trace(args, policy, trace_only) {
-        eprintln!("confine exception: {:?}", e);
+        eprintln!("confine exception: {}", e);
     }
 }

@@ -7,30 +7,14 @@ use nix::Error as NixError;
 use libc::user_regs_struct;
 use unshare::{Command, Namespace};
 
-use serde::Serialize;
 use serde_json::{json, Value};
 
-use std::collections::HashMap;
 use std::io::Error as IOError;
 
+use crate::error::{ConfineError, ConfineResult};
 use crate::policy::{Action, Policy};
-use crate::syscall::{ParsedSyscall, SyscallManager};
-
-/// Defines a serializable threat report that is returned to the user by default if not specified
-#[derive(Serialize, Default)]
-pub struct ThreatReport {
-    // stores only the system call names that are encountered
-    calls: Vec<String>,
-
-    // stores network addresses that are encountered
-    networking: Vec<String>,
-
-    // maps file I/O interactions
-    file_io: HashMap<String, String>,
-
-    // external commands executed
-    commands: Vec<String>,
-}
+use crate::syscall::{ParsedSyscall, SyscallManager, ArgMap};
+use crate::threat::ThreatReport;
 
 /// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
@@ -72,7 +56,7 @@ impl Tracer {
 
     /// Helper that instantiates a containerized environment before the execution of the actual
     /// child process.
-    fn init_container_env(&mut self) -> Result<(), NixError> {
+    fn init_container_env(&mut self) -> ConfineResult<()> {
         // created isolated namespace by unsharing namespaces
         let namespaces = vec![
             Namespace::User,
@@ -95,7 +79,7 @@ impl Tracer {
     /// instantiate a containerized environment with unshared namespaces and a seperately mounted
     /// filesystem, and then spawn the tracee. If a `Policy` is specified, rules will also be
     /// enforced.
-    pub fn trace(&mut self) -> Result<(), NixError> {
+    pub fn trace(&mut self) -> ConfineResult<()> {
         /// Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
         fn traceme() -> Result<(), IOError> {
             use std::io::ErrorKind;
@@ -106,18 +90,16 @@ impl Tracer {
             }
         }
 
+        // containerize the environment we are executing under
+        self.init_container_env()?;
+
         // call traceme helper to signal parent for tracing
         unsafe {
             self.cmd.pre_exec(traceme);
         }
 
         // spawns a child process handler
-        let child = match self.cmd.spawn() {
-            Ok(handler) => handler,
-            Err(_) => {
-                return Err(NixError::last());
-            }
-        };
+        let child = self.cmd.spawn()?;
 
         // create nix Pid, save state for later use
         self.pid = Pid::from_raw(child.pid());
@@ -131,16 +113,8 @@ impl Tracer {
 
         // run loop until broken by end of execution
         loop {
-            match self.step() {
-                Ok(status) => {
-                    // break if successfully completed execution
-                    if status == 0 {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    return Err(e);
-                }
+            if self.step()? == 0 {
+                break;
             }
         }
 
@@ -164,7 +138,7 @@ impl Tracer {
 
     /// Helper that parses a register value based on the corresponding type for it, and returns a
     /// genericized `serde_json::Value` to store back into the manager.
-    fn parse_type(&mut self, typename: &str, mut regval: u64) -> Result<Value, NixError> {
+    fn parse_type(&mut self, typename: &str, mut regval: u64) -> ConfineResult<Value> {
         // if type is a numeric value, return the register value as is without reading from memory
         // any further. TODO: unsigned and signed distinction and casting.
         let numerics: Vec<&str> = vec![
@@ -231,19 +205,61 @@ impl Tracer {
         Ok(json!(format!("0x{:x}", regval)))
     }
 
-    /// Introspect single event in traced process, using ptrace to parse out syscall registers for output.
-    fn step(&mut self) -> Result<i32, NixError> {
+    /// If a policy is parsed and properly configured, check to see if the current input system
+    /// call contains a rule that needs to be enforced.
+    fn enforce_policy(
+        &mut self,
+        syscall_num: u64,
+        args: &ArgMap,
+    ) -> ConfineResult<i32> {
+        if let Some(policy) = &self.policy {
+            // get the syscall name
+            let name: String = match self.manager.get_syscall_name(syscall_num) {
+                Some(name) => name,
+                None => {
+                    return Err(ConfineError::SystemError(NixError::invalid_argument()));
+                }
+            };
+
+            // check if name is set as policy, and get enforcement
+            if let Some(action) = policy.get_enforcement(&name) {
+                match action {
+                    // print warning with syscall but continue execution
+                    Action::Warn => {
+                        println!("confine: [WARN] encountered syscall {}", name);
+                    }
+
+                    // halt execution immediately and return
+                    Action::Block => {
+                        println!("confine: [BLOCK] encountered syscall {}", name);
+                        return Ok(-1);
+                    }
+
+                    // write parsed syscall to log file
+                    Action::Log => {
+                        let parsed_syscall: ParsedSyscall =
+                            ParsedSyscall::new(name, args.clone());
+                        policy.to_log(parsed_syscall)?;
+                    }
+
+                    // continue without issue
+                    Action::Permit => {}
+                }
+            }
+        }
+        Ok(0)
+    }
+
+    /// Implements the main step functionality for tracing one system call, entering the call,
+    /// parsing the syscall number and register contents, doing policy enforcement, and exiting
+    /// when necessary.
+    fn step(&mut self) -> ConfineResult<i32> {
         // encounter SYSCALL_ENTER
         ptrace::syscall(self.pid, None)?;
 
         // wait for status, return status if finished execution
-        match wait::waitpid(self.pid, None) {
-            Ok(status) => {
-                if let wait::WaitStatus::Exited(_, stat) = status {
-                    return Ok(stat);
-                }
-            }
-            Err(e) => return Err(e),
+        if let wait::WaitStatus::Exited(_, stat) = wait::waitpid(self.pid, None)? {
+            return Ok(stat);
         }
 
         // get register state as this point
@@ -257,12 +273,12 @@ impl Tracer {
 
         // for each argument, get corresponding register in calling convention, and parse
         // accordingly based on the given type
-        let mut args: HashMap<String, Value> = HashMap::new();
+        let mut args: ArgMap = ArgMap::new();
         for (idx, arg) in to_read.iter().enumerate() {
             // get contents of register in calling convention by index
             let regval: u64 = Tracer::get_reg_idx(regstate, idx as i32);
             if regval == u64::MAX {
-                return Err(NixError::invalid_argument());
+                return Err(ConfineError::SystemError(NixError::invalid_argument()));
             }
 
             // get type and decide if further reading is necessary
@@ -272,76 +288,32 @@ impl Tracer {
             args.insert(arg.to_string(), val);
         }
 
-        // after parsing, check to see if a policy is configured and if there is a rule that needs
-        // to be enforced upon the system call
-        if let Some(policy) = &self.policy {
-            // get the syscall name
-            let name: String = match self.manager.get_syscall_name(syscall_num) {
-                Some(name) => name,
-                None => {
-                    return Err(NixError::invalid_argument());
-                }
-            };
-
-            // check if name is set as policy, and get enforcement
-            match policy.get_enforcement(&name) {
-                Some(action) => {
-                    // determine what to be done based on the given action
-                    match action {
-                        // print warning with syscall but continue execution
-                        Action::Warn => {
-                            println!("confine: [WARN] encountered syscall {}", name);
-                        }
-
-                        // halt execution immediately and return
-                        Action::Block => {
-                            println!("confine: [BLOCK] encountered syscall {}", name);
-                            return Ok(0);
-                        }
-
-                        // write parsed syscall to log file
-                        Action::Log => {
-                            let parsed_syscall: ParsedSyscall =
-                                ParsedSyscall::new(name, args.clone());
-
-                            // write to log
-                            if let Err(e) = policy.to_log(parsed_syscall) {
-                                return Err(NixError::invalid_argument());
-                            }
-                        }
-
-                        // continue without issue
-                        Action::Permit => {}
-                    }
-                }
-                // continue if no action specified
-                None => {}
-            };
+        // at this stage, before commiting and exiting, check if a rule has been set that needs to
+        // be enforced
+        if self.enforce_policy(syscall_num, &args)? == -1 {
+            return Ok(0);
         }
 
         // add syscall to manager
-        self.manager.add_syscall(syscall_num, args).unwrap();
+        let parsed: ParsedSyscall = self.manager.add_syscall(syscall_num, args)?;
+
+        // check to see if any system call behavior needs to be stored in our threat report
+        self.report.check(&parsed)?;
 
         // encounter SYSCALL_EXIT
         ptrace::syscall(self.pid, None)?;
 
         // wait for status, return status if finished execution
-        match wait::waitpid(self.pid, None) {
-            Ok(status) => {
-                if let wait::WaitStatus::Exited(_, stat) = status {
-                    return Ok(stat);
-                }
-            }
-            Err(e) => {
-                return Err(e);
-            }
+        if let wait::WaitStatus::Exited(_, stat) = wait::waitpid(self.pid, None)? {
+            return Ok(stat);
         }
         Ok(-1)
     }
 
     /// Generates a JSONified dump of the full trace, including arguments.
-    pub fn normal_trace(&self) -> serde_json::Result<String> {
-        serde_json::to_string_pretty(&self.manager)
+    pub fn normal_trace(&self) -> ConfineResult<String> {
+        let json = serde_json::to_string_pretty(&self.manager)?;
+        Ok(json)
     }
 
     /// Generates a dump of the trace excluding arguments and including varying capabilities
