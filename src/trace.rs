@@ -1,25 +1,47 @@
 //! Defines modes of operation for syscall and library tracing. Provides several interfaces and
 //! wrappers to the `trace` submodule in order to allow convenient tracing.
 use nix::sys::{ptrace, wait};
+use nix::sys::signal::Signal;
+use nix::{mount, sched};
 use nix::unistd::{self, Pid};
 use nix::Error as NixError;
 
 use libc::user_regs_struct;
-use unshare::{Command, Namespace};
+use unshare::{Namespace, Command};
 
 use serde_json::{json, Value};
 
 use std::io::Error as IOError;
+use std::fs;
+use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
+
+//use std::process::Command;
+//use std::os::unix::process::CommandExt;
 
 use crate::error::{ConfineError, ConfineResult};
 use crate::policy::{Action, Policy};
 use crate::syscall::{ParsedSyscall, SyscallManager, ArgMap};
 use crate::threat::ThreatReport;
 
+// Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
+fn traceme() -> Result<(), IOError> {
+    use std::io::ErrorKind;
+    match ptrace::traceme() {
+        Err(nix::Error::Sys(errno)) => Err(IOError::from_raw_os_error(errno as i32)),
+        Err(e) => Err(IOError::new(ErrorKind::Other, e)),
+        _ => Ok(()),
+    }
+}
+
+
 /// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
     // generated Command for spawning when actually tracing
     cmd: Command,
+
+    // path to control groups for process restriction
+    cgroups: PathBuf,
 
     // encapsulates the `Pid` of the eventually running process
     pid: Pid,
@@ -37,42 +59,83 @@ pub struct Tracer {
 impl Tracer {
     /// Instantiates a new `Tracer` capable of dynamically tracing a process under a containerized
     /// environment, and enforcing policy rules.
-    pub fn new(args: Vec<String>, policy: Option<Policy>) -> Self {
+    pub fn new(args: Vec<String>, policy: Option<Policy>) -> ConfineResult<Self> {
         // create new unshare-wrapped command with arguments
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().skip(1) {
             cmd.arg(arg);
         }
 
+        // initialize cgroup, check if supported in kernel
+        let mut cgroups = PathBuf::from("/sys/fs/cgroup/pids");
+        if !cgroups.exists() {
+            panic!("Linux kernel does not support cgroups");
+        }
+        cgroups.push("confine");
+        
         // return mostly with default arguments that gets populated
-        Self {
+        Ok(Self {
             cmd,
+            cgroups,
             pid: Pid::from_raw(-1),
             policy,
             manager: SyscallManager::new().unwrap(),
             report: ThreatReport::default(),
-        }
+        })
     }
 
     /// Helper that instantiates a containerized environment before the execution of the actual
     /// child process.
-    fn init_container_env(&mut self) -> ConfineResult<()> {
+    fn init_container_env(&mut self) -> ConfineResult<isize> {
         // created isolated namespace by unsharing namespaces
         let namespaces = vec![
-            Namespace::User,
-            Namespace::Cgroup,
-            Namespace::Pid,
-            Namespace::Ipc,
+            Namespace::Pid,     // isolates process so that it appears as PID 1
+            Namespace::Uts,     // enables hostname to be changed
+            Namespace::User,    // unprvileged user to be root user
         ];
-        self.cmd.unshare(&namespaces);
 
-        // initialize cgroup
+        println!("--> Unsharing namespaces for isolated child process.");
+        self.cmd.unshare(&namespaces);
+        self.cmd.close_fds(..);
+
+        //sched::unshare(sched::CloneFlags::CLONE_NEWNS)?;
+
+        // initialize new cgroups directory if not found
+        if !self.cgroups.exists() {
+            println!("--> Initialize cgroups path for restricted resources.");
+            fs::create_dir_all(&self.cgroups)?;
+            let mut permission = fs::metadata(&self.cgroups)?.permissions();
+            permission.set_mode(511);
+            fs::set_permissions(&self.cgroups, permission).ok();
+        }
+
+        // write to new cgroups directory
+        fs::write(self.cgroups.join("pids.max"), b"20")?;
+        fs::write(self.cgroups.join("notify_on_release"), b"1")?;
+        fs::write(self.cgroups.join("cgroup.procs"), b"0")?;
 
         // sets the hostname for the new isolated process
+        // TODO: make random string
+        println!("--> Using new hostname");
         unistd::sethostname("confine")?;
 
-        // mount rootfs
-        todo!()
+        // mount rootfs and go to root path
+        println!("--> Mounting rootfs to root path");
+        unistd::chroot("rootfs")?;
+        unistd::chdir("/")?;
+
+        // mount the proc file system
+        println!("--> Mounting procfs");
+        const NONE: Option<&'static [u8]> = None;
+        mount::mount(Some("proc"), "proc", Some("proc"), mount::MsFlags::empty(), NONE)?;
+
+        unsafe {
+            self.cmd.pre_exec(traceme);
+        }
+        self.cmd.spawn()?;
+
+        mount::umount("proc")?;
+        Ok(0)
     }
 
     /// Executes a dynamic `ptrace`-based trace upon the given application specified. Will first
@@ -80,26 +143,34 @@ impl Tracer {
     /// filesystem, and then spawn the tracee. If a `Policy` is specified, rules will also be
     /// enforced.
     pub fn trace(&mut self) -> ConfineResult<()> {
-        /// Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
-        fn traceme() -> Result<(), IOError> {
-            use std::io::ErrorKind;
-            match ptrace::traceme() {
-                Err(nix::Error::Sys(errno)) => Err(IOError::from_raw_os_error(errno as i32)),
-                Err(e) => Err(IOError::new(ErrorKind::Other, e)),
-                _ => Ok(()),
-            }
-        }
+        
+        //let stack = &mut [0; 1024 * 1024];
+        //let callback = Box::new(|| self.init_container_env().unwrap());
 
-        // containerize the environment we are executing under
-        self.init_container_env()?;
-
+        /*
         // call traceme helper to signal parent for tracing
         unsafe {
             self.cmd.pre_exec(traceme);
         }
+        */
 
+        // containerize the environment we are executing under
+        //self.init_container_env()?;
+       
         // spawns a child process handler
+        println!("--> Spawning target executable in containerized environment");
+        unsafe {
+            self.cmd.pre_exec(traceme);
+        }
         let child = self.cmd.spawn()?;
+
+        /*
+        let clone_flags = sched::CloneFlags::CLONE_NEWNS | 
+            sched::CloneFlags::CLONE_NEWPID | sched::CloneFlags::CLONE_NEWCGROUP | sched::CloneFlags::CLONE_NEWUTS | 
+            sched::CloneFlags::CLONE_NEWIPC | sched::CloneFlags::CLONE_NEWNET;
+	    let child = sched::clone(callback, stack, clone_flags, Some(Signal::SIGCHLD as i32))?;
+        self.pid = child;
+        */
 
         // create nix Pid, save state for later use
         self.pid = Pid::from_raw(child.pid());
@@ -318,7 +389,20 @@ impl Tracer {
 
     /// Generates a dump of the trace excluding arguments and including varying capabilities
     /// for detecting potential IOCs
-    pub fn threat_trace(&self) -> serde_json::Result<String> {
-        unimplemented!()
+    pub fn threat_trace(&mut self) -> ConfineResult<String> {
+        // populate threat report with syscalls traced
+        self.report.populate(&self.manager.syscalls)?;
+
+        // create final JSON threat report
+        let json = serde_json::to_string_pretty(&self.report)?;
+        Ok(json)
+    }
+}
+
+impl Drop for Tracer {
+    fn drop(&mut self) {
+        if self.cgroups.exists() {
+            fs::remove_dir(&self.cgroups).expect("Cannot remove cgroup");
+        }
     }
 }

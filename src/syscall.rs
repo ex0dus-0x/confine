@@ -60,7 +60,7 @@ impl ParsedSyscall {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SyscallManager {
     /// stores the system calls that are parsed during confine execution
-    syscalls: Vec<ParsedSyscall>,
+    pub syscalls: Vec<ParsedSyscall>,
 
     /// stores all current state of system calls for the kernel
     #[serde(skip)]

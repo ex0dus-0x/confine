@@ -17,7 +17,7 @@ fn run_trace(
     trace_only: bool,
 ) -> Result<(), Box<dyn Error>> {
     // instantiate a new dynamic tracer, optionally with a policy path
-    let mut tracer: Tracer = Tracer::new(args, policy);
+    let mut tracer: Tracer = Tracer::new(args, policy)?;
 
     // execute trace with the given executable
     tracer.trace()?;

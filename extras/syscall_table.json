@@ -13,7 +13,7 @@
         "name": "write",
         "args": [
             "unsigned int fd",
-            "const char *buf",
+            "char *buf",
             "size_t count"
         ]
     },
