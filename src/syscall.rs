@@ -118,7 +118,6 @@ impl SyscallManager {
             .map(|syscall| syscall.name.clone())
     }
 
-
     /// Given a syscall number and parsed arguments, instantiate a `ParsedSyscall`, add to the
     /// final trace, and return a copy.
     pub fn add_syscall(&mut self, num: u64, args: ArgMap) -> ConfineResult<ParsedSyscall> {
@@ -132,7 +131,7 @@ impl SyscallManager {
             }
         };
 
-        // instantiate new ParsedSyscall, and a deep copy to return 
+        // instantiate new ParsedSyscall, and a deep copy to return
         let parsed: ParsedSyscall = ParsedSyscall::new(name, args);
         let parsed_copy: ParsedSyscall = parsed.clone();
 

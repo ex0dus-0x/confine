@@ -3,6 +3,8 @@
 
 use std::error::Error;
 use std::path::PathBuf;
+use std::time::Duration;
+use std::thread;
 
 use clap::{App, Arg};
 
@@ -21,6 +23,10 @@ fn run_trace(
 
     // execute trace with the given executable
     tracer.trace()?;
+
+    // block before output
+    let duration = Duration::new(1, 0);
+    thread::sleep(duration);
 
     // output a normal but full trace if `trace_only` is specified, otherwise give a briefer trace
     // but with threat analytics

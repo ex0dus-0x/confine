@@ -3,7 +3,7 @@
 use nix::Error as NixError;
 use serde_json::Error as JSONError;
 use serde_yaml::Error as YAMLError;
-use unshare::Error as UnshareError;
+//use unshare::Error as UnshareError;
 
 use std::error::Error;
 use std::fmt::{self, Display};
@@ -19,7 +19,7 @@ pub enum ConfineError {
     IOError(IOError),
 
     // problems encountered when attempting spawn a process
-    SpawnError(UnshareError),
+    //SpawnError(UnshareError),
 
     // problems encountered when attempting to call system facilities
     SystemError(NixError),
@@ -35,7 +35,7 @@ impl Display for ConfineError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ConfineError::IOError(..) => write!(f, "Failed to properly interact with file"),
-            ConfineError::SpawnError(err) => write!(f, "{}", err),
+            //ConfineError::SpawnError(err) => write!(f, "{}", err),
             ConfineError::SystemError(err) => write!(f, "Linux system error: {}", err),
             ConfineError::SyscallError(msg) => write!(f, "Error with handling syscalls: {}", msg),
             ConfineError::ParseError(err) => write!(f, "Unable to properly parse: {}", err),
@@ -51,11 +51,13 @@ impl From<IOError> for ConfineError {
     }
 }
 
+/*
 impl From<UnshareError> for ConfineError {
     fn from(err: UnshareError) -> ConfineError {
         ConfineError::SpawnError(err)
     }
 }
+*/
 
 impl From<NixError> for ConfineError {
     fn from(err: NixError) -> ConfineError {

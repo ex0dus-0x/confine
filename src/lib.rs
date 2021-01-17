@@ -8,5 +8,5 @@
 pub mod error;
 pub mod policy;
 pub mod syscall;
-pub mod trace;
 pub mod threat;
+pub mod trace;

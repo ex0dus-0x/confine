@@ -1,27 +1,25 @@
 //! Defines modes of operation for syscall and library tracing. Provides several interfaces and
 //! wrappers to the `trace` submodule in order to allow convenient tracing.
-use nix::sys::{ptrace, wait};
 use nix::sys::signal::Signal;
-use nix::{mount, sched};
+use nix::sys::{ptrace, wait};
 use nix::unistd::{self, Pid};
 use nix::Error as NixError;
+use nix::{mount, sched};
 
 use libc::user_regs_struct;
-use unshare::{Namespace, Command};
 
 use serde_json::{json, Value};
 
-use std::io::Error as IOError;
 use std::fs;
-use std::path::PathBuf;
+use std::io::Error as IOError;
 use std::os::unix::fs::PermissionsExt;
-
-//use std::process::Command;
-//use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
+use std::process::Command;
+use std::os::unix::process::CommandExt;
 
 use crate::error::{ConfineError, ConfineResult};
 use crate::policy::{Action, Policy};
-use crate::syscall::{ParsedSyscall, SyscallManager, ArgMap};
+use crate::syscall::{ArgMap, ParsedSyscall, SyscallManager};
 use crate::threat::ThreatReport;
 
 // Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
@@ -33,7 +31,6 @@ fn traceme() -> Result<(), IOError> {
         _ => Ok(()),
     }
 }
-
 
 /// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
@@ -72,7 +69,7 @@ impl Tracer {
             panic!("Linux kernel does not support cgroups");
         }
         cgroups.push("confine");
-        
+
         // return mostly with default arguments that gets populated
         Ok(Self {
             cmd,
@@ -84,21 +81,62 @@ impl Tracer {
         })
     }
 
-    /// Helper that instantiates a containerized environment before the execution of the actual
-    /// child process.
-    fn init_container_env(&mut self) -> ConfineResult<isize> {
+    /// Encapsulates container runtime creation and process tracing execution under a callback that
+    /// is cloned to run.
+    pub fn trace(&mut self) -> ConfineResult<()> {
+        let stack = &mut [0; 1024 * 1024];
+        let callback = Box::new(|| {
+            match self.exec_container_trace() {
+                Ok(res) => res,
+                Err(e) => {
+                    panic!(e);
+                }
+            }
+        });
+
+        // set namespaces to unshare for the new process
+        let clone_flags = sched::CloneFlags::CLONE_NEWNS |
+            sched::CloneFlags::CLONE_NEWPID | sched::CloneFlags::CLONE_NEWCGROUP | sched::CloneFlags::CLONE_NEWUTS |
+            sched::CloneFlags::CLONE_NEWIPC | sched::CloneFlags::CLONE_NEWNET;
+
+        // clone new process with callback
+        sched::clone(callback, stack, clone_flags, Some(Signal::SIGCHLD as i32))?;
+        Ok(())
+    }
+
+    /*
+    fn better_container_env(&mut self) -> ConfineResult<()> {
         // created isolated namespace by unsharing namespaces
         let namespaces = vec![
+            Namespace::Mount,   // nable mounting child folders
             Namespace::Pid,     // isolates process so that it appears as PID 1
             Namespace::Uts,     // enables hostname to be changed
             Namespace::User,    // unprvileged user to be root user
+            Namespace::Ipc,     // isolate message queues
+            Namespace::Cgroup,  // isolate cgroups
         ];
-
         println!("--> Unsharing namespaces for isolated child process.");
         self.cmd.unshare(&namespaces);
-        self.cmd.close_fds(..);
 
-        //sched::unshare(sched::CloneFlags::CLONE_NEWNS)?;
+        // saving the CAP_SYS_PTRACE capability
+        let caps = vec![Capbility::CAP_SYS_PTRACE];
+        self.cmd.keep_caps(caps);
+
+        // chroot the rootfs mount
+        self.cmd.chroot_dir("rootfs");
+        Ok(())
+    }
+    */
+
+    /// Helper that instantiates a containerized environment before the execution of the actual
+    /// child process.
+    fn init_container_env(&mut self) -> ConfineResult<()> { 
+        sched::unshare(sched::CloneFlags::CLONE_NEWNS)?;
+
+        // keep ptrace capabilities 
+        unsafe {
+            let _ = libc::prctl(libc::SYS_ptrace as i32);
+        }
 
         // initialize new cgroups directory if not found
         if !self.cgroups.exists() {
@@ -127,36 +165,25 @@ impl Tracer {
         // mount the proc file system
         println!("--> Mounting procfs");
         const NONE: Option<&'static [u8]> = None;
-        mount::mount(Some("proc"), "proc", Some("proc"), mount::MsFlags::empty(), NONE)?;
-
-        unsafe {
-            self.cmd.pre_exec(traceme);
-        }
-        self.cmd.spawn()?;
-
-        mount::umount("proc")?;
-        Ok(0)
+        mount::mount(
+            Some("proc"),
+            "proc",
+            Some("proc"),
+            mount::MsFlags::empty(),
+            NONE,
+        )?;
+        Ok(())
     }
 
     /// Executes a dynamic `ptrace`-based trace upon the given application specified. Will first
     /// instantiate a containerized environment with unshared namespaces and a seperately mounted
     /// filesystem, and then spawn the tracee. If a `Policy` is specified, rules will also be
     /// enforced.
-    pub fn trace(&mut self) -> ConfineResult<()> {
-        
-        //let stack = &mut [0; 1024 * 1024];
-        //let callback = Box::new(|| self.init_container_env().unwrap());
-
-        /*
-        // call traceme helper to signal parent for tracing
-        unsafe {
-            self.cmd.pre_exec(traceme);
-        }
-        */
+    fn exec_container_trace(&mut self) -> ConfineResult<isize> {
 
         // containerize the environment we are executing under
-        //self.init_container_env()?;
-       
+        self.init_container_env()?;
+
         // spawns a child process handler
         println!("--> Spawning target executable in containerized environment");
         unsafe {
@@ -164,16 +191,8 @@ impl Tracer {
         }
         let child = self.cmd.spawn()?;
 
-        /*
-        let clone_flags = sched::CloneFlags::CLONE_NEWNS | 
-            sched::CloneFlags::CLONE_NEWPID | sched::CloneFlags::CLONE_NEWCGROUP | sched::CloneFlags::CLONE_NEWUTS | 
-            sched::CloneFlags::CLONE_NEWIPC | sched::CloneFlags::CLONE_NEWNET;
-	    let child = sched::clone(callback, stack, clone_flags, Some(Signal::SIGCHLD as i32))?;
-        self.pid = child;
-        */
-
         // create nix Pid, save state for later use
-        self.pid = Pid::from_raw(child.pid());
+        self.pid = Pid::from_raw(child.id() as i32);
 
         // configure options to trace for syscall interrupt
         // TODO: trace forked childrens
@@ -189,8 +208,9 @@ impl Tracer {
             }
         }
 
-        // TODO: unmount the rootfs partition
-        Ok(())
+        // unmount the procfs partition
+        mount::umount("proc")?;
+        Ok(0)
     }
 
     /// Helper that returns the register content given register state and calling convention index.
@@ -263,7 +283,11 @@ impl Tracer {
                 for byte in bytes.iter() {
                     // break when encountering null byte, or append to buffer
                     if *byte == 0 {
-                        return Ok(json!(std::str::from_utf8(&buffer).unwrap()));
+                        let bufstr: &str = match std::str::from_utf8(&buffer) {
+                            Ok(res) => res,
+                            Err(_) => "?",
+                        };
+                        return Ok(json!(bufstr));
                     }
                     buffer.push(*byte);
                 }
@@ -278,11 +302,7 @@ impl Tracer {
 
     /// If a policy is parsed and properly configured, check to see if the current input system
     /// call contains a rule that needs to be enforced.
-    fn enforce_policy(
-        &mut self,
-        syscall_num: u64,
-        args: &ArgMap,
-    ) -> ConfineResult<i32> {
+    fn enforce_policy(&mut self, syscall_num: u64, args: &ArgMap) -> ConfineResult<i32> {
         if let Some(policy) = &self.policy {
             // get the syscall name
             let name: String = match self.manager.get_syscall_name(syscall_num) {
@@ -308,8 +328,7 @@ impl Tracer {
 
                     // write parsed syscall to log file
                     Action::Log => {
-                        let parsed_syscall: ParsedSyscall =
-                            ParsedSyscall::new(name, args.clone());
+                        let parsed_syscall: ParsedSyscall = ParsedSyscall::new(name, args.clone());
                         policy.to_log(parsed_syscall)?;
                     }
 
@@ -367,6 +386,7 @@ impl Tracer {
 
         // add syscall to manager
         let parsed: ParsedSyscall = self.manager.add_syscall(syscall_num, args)?;
+        println!("{:?}", parsed);
 
         // check to see if any system call behavior needs to be stored in our threat report
         self.report.check(&parsed)?;
@@ -402,7 +422,7 @@ impl Tracer {
 impl Drop for Tracer {
     fn drop(&mut self) {
         if self.cgroups.exists() {
-            fs::remove_dir(&self.cgroups).expect("Cannot remove cgroup");
+            fs::remove_dir(&self.cgroups).expect("Cannot delete cgroups path");
         }
     }
 }
