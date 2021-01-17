@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use std::collections::HashMap;
+use std::fmt::{self, Display};
 use std::path::PathBuf;
 
 use crate::error::{ConfineError, ConfineResult};
@@ -53,6 +54,17 @@ impl ParsedSyscall {
     pub fn to_string(&self) -> ConfineResult<String> {
         let json: String = serde_json::to_string_pretty(self)?;
         Ok(json)
+    }
+}
+
+impl Display for ParsedSyscall {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut syscall: String = format!("{}(", self.name);
+        for (typename, name) in self.args.iter() {
+            syscall.push_str(&format!("{} = {}, ", typename, name));
+        }
+        syscall.push_str("\x08\x08)");
+        write!(f, "{}", syscall)
     }
 }
 

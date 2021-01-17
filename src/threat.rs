@@ -42,7 +42,8 @@ pub struct ThreatCapabilities {
 impl ThreatCapabilities {
     /// Given a parsed pathstring, determine if it is a commonly used path for some type of
     /// persistence strategy.
-    pub fn check_persistence(&mut self, path: String) -> () {
+    pub fn check_persistence(&mut self, path: String) {
+        // check if services are created in any known paths
         let init_persistence: Vec<&str> = vec![
             "/etc/rc.d/rc.local",
             "/etc/rc.conf",
@@ -52,9 +53,16 @@ impl ThreatCapabilities {
             ".bashrc",
             ".bash_profile",
         ];
+        if init_persistence.iter().any(|&p| path.contains(p)) {
+            self.init_persistence = true;
+        }
 
+        // check if time-based jobs are created in known paths
         let time_persistence: Vec<&str> =
             vec!["/etc/cron.hourly/", "/etc/crontab", "/etc/cron.daily/"];
+        if time_persistence.iter().any(|&t| path.contains(t)) {
+            self.time_persistence = true;
+        }
     }
 }
 
@@ -82,7 +90,7 @@ pub struct ThreatReport {
 
 impl ThreatReport {
     /// Given a list of system calls, populate interface with only the syscall names.
-    pub fn populate(&mut self, syscalls: &Vec<ParsedSyscall>) -> ConfineResult<()> {
+    pub fn populate(&mut self, syscalls: &[ParsedSyscall]) -> ConfineResult<()> {
         self.syscalls = syscalls
             .iter()
             .map(|syscall| syscall.name.clone())
@@ -94,11 +102,17 @@ impl ThreatReport {
     /// to parse out for our final report
     pub fn check(&mut self, syscall: &ParsedSyscall) -> ConfineResult<()> {
         match syscall.name.as_str() {
-            // get strings read/written to by file I/O
+            // get strings read/written to by file I/O, add to results, but also check for
+            // potential persistence capability
             "read" | "write" => {
                 let buf_key: String = "char *buf".to_string();
                 let buffer: &str = syscall.args.get(&buf_key).unwrap().as_str().unwrap();
+
+                // add string to vector
                 self.strings.push(buffer.to_string());
+
+                // check if a known for persistence
+                self.capabilities.check_persistence(buffer.to_string());
             }
 
             // if an open* syscall is encountered, get filename and mode
@@ -127,6 +141,40 @@ impl ThreatReport {
                 let args_key: String = "const char *const *argv".to_string();
                 let args: &str = syscall.args.get(&args_key).unwrap().as_str().unwrap();
                 self.commands.push(format!("{} {}", cmd, args));
+            }
+
+            // check if syscalls for blocking are called
+            "nanosleep" | "clock_nanosleep" => {
+                self.capabilities.stalling = true;
+            }
+
+            // check for antidebug and potential process injection
+            "ptrace" => {
+                let req_key: String = "long request".to_string();
+                let request: i64 = syscall.args.get(&req_key).unwrap().as_i64().unwrap();
+
+                match request {
+                    // PTRACE_TRACEME
+                    0 => {
+                        self.capabilities.antidebug = true;
+                    }
+
+                    // PTRACE_PEEK*
+                    1 | 2 => {
+                        self.capabilities.process_infect = true;
+                    }
+
+                    _ => {}
+                }
+            }
+
+            // detect process renaming technique
+            "prctl" => {
+                let option_key: String = "int option".to_string();
+                let option: i64 = syscall.args.get(&option_key).unwrap().as_i64().unwrap();
+                if option == 15 {
+                    self.capabilities.process_renaming = true;
+                }
             }
 
             // TODO: networking

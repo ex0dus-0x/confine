@@ -13,9 +13,9 @@ use serde_json::{json, Value};
 use std::fs;
 use std::io::Error as IOError;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
-use std::os::unix::process::CommandExt;
 
 use crate::error::{ConfineError, ConfineResult};
 use crate::policy::{Action, Policy};
@@ -49,6 +49,9 @@ pub struct Tracer {
     // interfaces system call representation parsing
     manager: SyscallManager,
 
+    // if set, prints out each syscall dynamically
+    verbose_trace: bool,
+
     // generated final report for potential threats and IOCs
     report: ThreatReport,
 }
@@ -56,7 +59,11 @@ pub struct Tracer {
 impl Tracer {
     /// Instantiates a new `Tracer` capable of dynamically tracing a process under a containerized
     /// environment, and enforcing policy rules.
-    pub fn new(args: Vec<String>, policy: Option<Policy>) -> ConfineResult<Self> {
+    pub fn new(
+        args: Vec<String>,
+        policy: Option<Policy>,
+        verbose_trace: bool,
+    ) -> ConfineResult<Self> {
         // create new unshare-wrapped command with arguments
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().skip(1) {
@@ -77,6 +84,7 @@ impl Tracer {
             pid: Pid::from_raw(-1),
             policy,
             manager: SyscallManager::new().unwrap(),
+            verbose_trace,
             report: ThreatReport::default(),
         })
     }
@@ -85,19 +93,20 @@ impl Tracer {
     /// is cloned to run.
     pub fn trace(&mut self) -> ConfineResult<()> {
         let stack = &mut [0; 1024 * 1024];
-        let callback = Box::new(|| {
-            match self.exec_container_trace() {
-                Ok(res) => res,
-                Err(e) => {
-                    panic!(e);
-                }
+        let callback = Box::new(|| match self.exec_container_trace() {
+            Ok(res) => res,
+            Err(e) => {
+                panic!(e);
             }
         });
 
         // set namespaces to unshare for the new process
-        let clone_flags = sched::CloneFlags::CLONE_NEWNS |
-            sched::CloneFlags::CLONE_NEWPID | sched::CloneFlags::CLONE_NEWCGROUP | sched::CloneFlags::CLONE_NEWUTS |
-            sched::CloneFlags::CLONE_NEWIPC | sched::CloneFlags::CLONE_NEWNET;
+        let clone_flags = sched::CloneFlags::CLONE_NEWNS
+            | sched::CloneFlags::CLONE_NEWPID
+            | sched::CloneFlags::CLONE_NEWCGROUP
+            | sched::CloneFlags::CLONE_NEWUTS
+            | sched::CloneFlags::CLONE_NEWIPC
+            | sched::CloneFlags::CLONE_NEWNET;
 
         // clone new process with callback
         sched::clone(callback, stack, clone_flags, Some(Signal::SIGCHLD as i32))?;
@@ -130,10 +139,10 @@ impl Tracer {
 
     /// Helper that instantiates a containerized environment before the execution of the actual
     /// child process.
-    fn init_container_env(&mut self) -> ConfineResult<()> { 
+    fn init_container_env(&mut self) -> ConfineResult<()> {
         sched::unshare(sched::CloneFlags::CLONE_NEWNS)?;
 
-        // keep ptrace capabilities 
+        // keep ptrace capabilities
         unsafe {
             let _ = libc::prctl(libc::SYS_ptrace as i32);
         }
@@ -180,7 +189,6 @@ impl Tracer {
     /// filesystem, and then spawn the tracee. If a `Policy` is specified, rules will also be
     /// enforced.
     fn exec_container_trace(&mut self) -> ConfineResult<isize> {
-
         // containerize the environment we are executing under
         self.init_container_env()?;
 
@@ -283,10 +291,7 @@ impl Tracer {
                 for byte in bytes.iter() {
                     // break when encountering null byte, or append to buffer
                     if *byte == 0 {
-                        let bufstr: &str = match std::str::from_utf8(&buffer) {
-                            Ok(res) => res,
-                            Err(_) => "?",
-                        };
+                        let bufstr: &str = std::str::from_utf8(&buffer).unwrap_or("?");
                         return Ok(json!(bufstr));
                     }
                     buffer.push(*byte);
@@ -386,7 +391,10 @@ impl Tracer {
 
         // add syscall to manager
         let parsed: ParsedSyscall = self.manager.add_syscall(syscall_num, args)?;
-        println!("{:?}", parsed);
+
+        if self.verbose_trace {
+            println!("{}", parsed);
+        }
 
         // check to see if any system call behavior needs to be stored in our threat report
         self.report.check(&parsed)?;
@@ -399,12 +407,6 @@ impl Tracer {
             return Ok(stat);
         }
         Ok(-1)
-    }
-
-    /// Generates a JSONified dump of the full trace, including arguments.
-    pub fn normal_trace(&self) -> ConfineResult<String> {
-        let json = serde_json::to_string_pretty(&self.manager)?;
-        Ok(json)
     }
 
     /// Generates a dump of the trace excluding arguments and including varying capabilities

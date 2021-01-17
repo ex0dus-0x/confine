@@ -2,6 +2,21 @@ sample:
     name: Simple Command Execution
     description: Traces a simple command executing in a confine container
 
+policy:
+    logpath: test.log
+    rules:
+        - name: Open warn rule
+          syscall: openat
+          action: WARN
+
+        - name: Close log rule
+          syscall: close
+          action: LOG
+
+        - name: Exit block rule
+          syscall: exit_group
+          action: BLOCK
+
 execution:
     - name: build
       trace: false

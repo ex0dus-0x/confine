@@ -3,8 +3,8 @@
 
 use std::error::Error;
 use std::path::PathBuf;
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 use clap::{App, Arg};
 
@@ -16,25 +16,20 @@ use confine::trace::Tracer;
 fn run_trace(
     args: Vec<String>,
     policy: Option<Policy>,
-    trace_only: bool,
+    verbose_trace: bool,
 ) -> Result<(), Box<dyn Error>> {
     // instantiate a new dynamic tracer, optionally with a policy path
-    let mut tracer: Tracer = Tracer::new(args, policy)?;
+    let mut tracer: Tracer = Tracer::new(args, policy, verbose_trace)?;
 
-    // execute trace with the given executable
+    // execute trace with the given executable, output syscalls if `verbose_trace` is set
     tracer.trace()?;
 
     // block before output
     let duration = Duration::new(1, 0);
     thread::sleep(duration);
 
-    // output a normal but full trace if `trace_only` is specified, otherwise give a briefer trace
-    // but with threat analytics
-    if trace_only {
-        println!("{}", tracer.normal_trace()?);
-    } else {
-        println!("{}", tracer.threat_trace()?);
-    }
+    // output threat analytics
+    println!("\n{}", tracer.threat_trace()?);
     Ok(())
 }
 
@@ -50,7 +45,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("policy_path")
-                .help("Path to policy file to parse and enforce on the command being run")
+                .help("Path to policy file to parse and enforce on the command being run.")
                 .short("p")
                 .long("policy")
                 .takes_value(true)
@@ -58,10 +53,10 @@ fn main() {
                 .required(false),
         )
         .arg(
-            Arg::with_name("trace_only")
-                .help("Run only a standard trace against syscalls, and output JSONified trace.")
-                .short("t")
-                .long("trace_only")
+            Arg::with_name("verbose_trace")
+                .help("Runs and output a standard trace against syscalls during execution.")
+                .short("v")
+                .long("verbose_trace")
                 .required(false),
         )
         .get_matches();
@@ -86,10 +81,10 @@ fn main() {
     };
 
     // check if we are only running a simple trace
-    let trace_only: bool = matches.is_present("trace_only");
+    let verbose_trace: bool = matches.is_present("verbose_trace");
 
     // run trace depending on arguments specified
-    if let Err(e) = run_trace(args, policy, trace_only) {
+    if let Err(e) = run_trace(args, policy, verbose_trace) {
         eprintln!("confine exception: {}", e);
     }
 }
