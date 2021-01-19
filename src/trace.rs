@@ -218,6 +218,9 @@ impl Tracer {
 
         // unmount the procfs partition
         mount::umount("proc")?;
+
+        // print final trace while still in cloned process
+        println!("{}", self.threat_trace()?);
         Ok(0)
     }
 

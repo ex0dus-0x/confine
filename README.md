@@ -1,6 +1,6 @@
 # confine
 
-Dynamic threat detection sandbox
+Dynamic threat detection container
 
 ## Introduction
 

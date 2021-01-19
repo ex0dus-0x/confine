@@ -1,7 +1,7 @@
 [package]
 name = "confine"
-description = "Dynamic threat detection sandbox"
-version = "3.1.0"
+description = "Dynamic threat detection container"
+version = "3.1.2"
 
 edition = "2018"
 

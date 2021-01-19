@@ -3,8 +3,6 @@
 
 use std::error::Error;
 use std::path::PathBuf;
-use std::thread;
-use std::time::Duration;
 
 use clap::{App, Arg};
 
@@ -23,13 +21,6 @@ fn run_trace(
 
     // execute trace with the given executable, output syscalls if `verbose_trace` is set
     tracer.trace()?;
-
-    // block before output
-    let duration = Duration::new(1, 0);
-    thread::sleep(duration);
-
-    // output threat analytics
-    println!("\n{}", tracer.threat_trace()?);
     Ok(())
 }
 
@@ -41,7 +32,7 @@ fn main() {
                 .help("Command to run under sandboxing, including any positional arguments")
                 .raw(true)
                 .takes_value(true)
-                .required(true),
+                .required(false),
         )
         .arg(
             Arg::with_name("policy_path")
