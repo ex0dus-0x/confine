@@ -6,21 +6,17 @@ use std::path::PathBuf;
 
 use clap::{App, Arg};
 
-use confine::policy::Policy;
+use confine::config::Configuration;
 use confine::trace::Tracer;
 
 /// Takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
 /// we can preemptively output the trace as well, in the case the user only wants a trace.
-fn run_trace(
-    args: Vec<String>,
-    policy: Option<Policy>,
-    verbose_trace: bool,
-) -> Result<(), Box<dyn Error>> {
+fn run_trace(config: Configuration, verbose_trace: bool) -> Result<(), Box<dyn Error>> {
     // instantiate a new dynamic tracer, optionally with a policy path
-    let mut tracer: Tracer = Tracer::new(args, policy, verbose_trace)?;
+    //let mut tracer: Tracer = Tracer::new(args, policy, verbose_trace)?;
 
     // execute trace with the given executable, output syscalls if `verbose_trace` is set
-    tracer.trace()?;
+    //tracer.trace()?;
     Ok(())
 }
 
@@ -28,20 +24,10 @@ fn main() {
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .arg(
-            Arg::with_name("COMMAND")
-                .help("Command to run under sandboxing, including any positional arguments")
-                .raw(true)
+            Arg::with_name("PATH")
+                .help("Path to configuration for provisioning container.")
                 .takes_value(true)
-                .required(false),
-        )
-        .arg(
-            Arg::with_name("policy_path")
-                .help("Path to policy file to parse and enforce on the command being run.")
-                .short("p")
-                .long("policy")
-                .takes_value(true)
-                .value_name("POLICY_PATH")
-                .required(false),
+                .required(true),
         )
         .arg(
             Arg::with_name("verbose_trace")
@@ -52,30 +38,18 @@ fn main() {
         )
         .get_matches();
 
-    // collect args into vec and convert to String for lifetime
-    let _args: Vec<&str> = matches.values_of("COMMAND").unwrap().collect::<Vec<&str>>();
-    let args: Vec<String> = _args.iter().map(|s| s.to_string()).collect();
+    // get path to configuration to provision and execute
+    let config_path: PathBuf = PathBuf::from(matches.value_of("PATH").unwrap());
 
-    // TODO: canonicalize the actual application, unshare only supports abspaths and not $PATH
-
-    // parse out policy generation options
-    #[allow(clippy::redundant_closure)]
-    let policy_path: Option<PathBuf> = matches.value_of("policy_path").map(|p| PathBuf::from(p));
-
-    // instantiates policy interface if file is given
-    let policy: Option<Policy> = match policy_path {
-        Some(pol) => match Policy::new(pol) {
-            Ok(p) => Some(p),
-            Err(_) => None,
-        },
-        None => None,
-    };
+    // parse configuration from path
+    let configuration: Configuration =
+        Configuration::new(config_path).expect("Unable to parse configuration.");
 
     // check if we are only running a simple trace
     let verbose_trace: bool = matches.is_present("verbose_trace");
 
     // run trace depending on arguments specified
-    if let Err(e) = run_trace(args, policy, verbose_trace) {
-        eprintln!("confine exception: {}", e);
+    if let Err(err) = run_trace(configuration, verbose_trace) {
+        eprintln!("confine exception: {}", err);
     }
 }

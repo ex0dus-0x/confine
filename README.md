@@ -1,38 +1,21 @@
-# confine
+<div align="center">
+    <h1>confine</h1>
+    <p>Containers, but for dynamic malware analysis</p>
+</div>
 
-Dynamic threat detection container
-
-## Introduction
-
-__confine__ is a lightweight app sandbox that helps triage suspicious executables. It's aimed to be a useful tool for any detection
-engineer or malware analyst / reverser to dynamically analyze the behavior of varying samples, and empower other systems and infrastructure pipelines
-that help automate the process of host-based detection.
+__confine__ is a light container runtime for dynamically analyzing suspicious executables.
 
 ## Features
 
-### Detection
-
-__confine__ operates as an elevated version of `strace`, containerizing traces and digging out various capabilities that
-are detected in these traces for the analyst to further reason with.
-
-```
-$ confine -- ./suspicious_bin
-```
-
-### Mitigation
-
-__confine__ supports mitigation by acting almost as a host-based firewall, allowing analysts to test detection policies in YAML against samples with ease, in
-order to aid in the engineering of protective signatures and detection of IOCs.
-
-```
-$ confine --policy config.yml -- ./suspicious_bin
-```
-
 ## Usage
 
+Installing 
+
+A `Confinement` is __confine__'s version of a `Dockerfile`, but for provisioning 
+container environments for tracing an executable. 
+
 ```
-$ cargo install
-$ confine -h
+
 ```
 
 ## License

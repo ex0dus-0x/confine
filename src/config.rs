@@ -8,14 +8,27 @@ use serde::Deserialize;
 use crate::error::ConfineResult;
 use crate::syscall::ParsedSyscall;
 
-/*
-/// Implements the variants a user input for a syscall rule can be.
 #[derive(Deserialize, Debug, Clone)]
-pub enum SyscallType {
-    Syscall(Syscall),
-    Group(SyscallGroup),
+pub struct Configuration {
+    sample: Sample,
+    policy: Option<Policy>,
+    execution: Execution,
+}
 
-*/
+impl Configuration {
+    pub fn new(path: PathBuf) -> ConfineResult<Self> {
+        let contents: String = fs::read_to_string(path)?;
+        let yaml = serde_yaml::from_str(&contents)?;
+        Ok(yaml)
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Sample {
+    name: String,
+    description: Option<String>,
+    url: Option<String>,
+}
 
 /// Declares an action parsed by the userspace application and applied to
 /// system calls before trace.
@@ -58,14 +71,7 @@ pub struct Policy {
     pub rules: Vec<Rule>,
 }
 
-impl Policy {
-    /// Instantiates a strongly typed `Policy` from a given
-    pub fn new(path: PathBuf) -> ConfineResult<Self> {
-        let contents: String = fs::read_to_string(path)?;
-        let yaml = serde_yaml::from_str(&contents)?;
-        Ok(yaml)
-    }
-
+impl Policy { 
     /// Checks if a given syscall name is set as a rule, and return action to enforce if found.
     pub fn get_enforcement(&self, syscall: &str) -> Option<Action> {
         self.rules
@@ -82,4 +88,16 @@ impl Policy {
         }
         Ok(())
     }
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Execution {
+    steps: Vec<Step>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Step {
+    name: String,
+    trace: Option<bool>,
+    command: Vec<String>,
 }

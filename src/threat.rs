@@ -109,7 +109,9 @@ impl ThreatReport {
                 let buffer: &str = syscall.args.get(&buf_key).unwrap().as_str().unwrap();
 
                 // add string to vector
-                self.strings.push(buffer.to_string());
+                if buffer != "" {
+                    self.strings.push(buffer.to_string());
+                }
 
                 // check if a known for persistence
                 self.capabilities.check_persistence(buffer.to_string());

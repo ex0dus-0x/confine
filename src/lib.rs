@@ -5,8 +5,8 @@
 //!  - deserialization support for traces to serializable formats
 //!  - policy parsing and enforcement
 
+pub mod config;
 pub mod error;
-pub mod policy;
 pub mod syscall;
 pub mod threat;
 pub mod trace;

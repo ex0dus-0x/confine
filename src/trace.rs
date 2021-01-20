@@ -17,8 +17,8 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
+use crate::config::{Action, Policy};
 use crate::error::{ConfineError, ConfineResult};
-use crate::policy::{Action, Policy};
 use crate::syscall::{ArgMap, ParsedSyscall, SyscallManager};
 use crate::threat::ThreatReport;
 
