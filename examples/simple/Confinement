@@ -2,7 +2,7 @@ sample:
     name: Simple Command Execution
     description: Traces a simple command executing in a confine container
 
-policy:
+enforce:
     logpath: test.log
     rules:
         - name: Open warn rule

@@ -4,16 +4,20 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 
-use confine::config::Configuration;
-use confine::trace::Tracer;
+mod config;
+mod error;
+mod syscall;
+mod threat;
+mod trace;
 
-/// Takes an initialized `TraceProc` and execute a normal trace, and store to struct. Once traced,
-/// we can preemptively output the trace as well, in the case the user only wants a trace.
-fn run_trace(config: Configuration, verbose_trace: bool) -> Result<(), Box<dyn Error>> {
-    // instantiate a new dynamic tracer, optionally with a policy path
-    //let mut tracer: Tracer = Tracer::new(args, policy, verbose_trace)?;
+use crate::config::Confinement;
+use crate::trace::Tracer;
+
+fn run_trace(config: Confinement, verbose_trace: bool) -> Result<(), Box<dyn Error>> {
+    // create a new dynamic tracer, optionally with a policy path
+    let mut tracer: Tracer = Tracer::new(config, verbose_trace)?;
 
     // execute trace with the given executable, output syscalls if `verbose_trace` is set
     //tracer.trace()?;
@@ -22,10 +26,12 @@ fn run_trace(config: Configuration, verbose_trace: bool) -> Result<(), Box<dyn E
 
 fn main() {
     let matches = App::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
+        .setting(AppSettings::ArgRequiredElseHelp)
         .arg(
             Arg::with_name("PATH")
-                .help("Path to configuration for provisioning container.")
+                .help("Path to workspace with `Confinement` for provisioning container.")
                 .takes_value(true)
                 .required(true),
         )
@@ -39,17 +45,28 @@ fn main() {
         .get_matches();
 
     // get path to configuration to provision and execute
-    let config_path: PathBuf = PathBuf::from(matches.value_of("PATH").unwrap());
+    let mut config_path: PathBuf = PathBuf::from(matches.value_of("PATH").unwrap());
+    config_path.push("Confinement");
+    if !config_path.exists() {
+        panic!(
+            "Path containing `Confinement` doesn't exist: {:?}.",
+            config_path
+        );
+    }
 
     // parse configuration from path
-    let configuration: Configuration =
-        Configuration::new(config_path).expect("Unable to parse configuration.");
+    let config: Confinement = match Confinement::new(config_path) {
+        Ok(config) => config,
+        Err(e) => {
+            panic!("{}", e);
+        }
+    };
 
     // check if we are only running a simple trace
     let verbose_trace: bool = matches.is_present("verbose_trace");
 
     // run trace depending on arguments specified
-    if let Err(err) = run_trace(configuration, verbose_trace) {
-        eprintln!("confine exception: {}", err);
+    if let Err(err) = run_trace(config, verbose_trace) {
+        panic!("confine exception: {}", err);
     }
 }

@@ -17,10 +17,13 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::config::{Action, Policy};
+use crate::config::{Action, Confinement};
 use crate::error::{ConfineError, ConfineResult};
 use crate::syscall::{ArgMap, ParsedSyscall, SyscallManager};
 use crate::threat::ThreatReport;
+
+const UPSTREAM_ROOTFS_URL: &'static str =
+    "https://github.com/ex0dus-0x/confine/releases/download/0.0.1/rootfs.tar";
 
 // Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
 fn traceme() -> Result<(), IOError> {
@@ -34,20 +37,11 @@ fn traceme() -> Result<(), IOError> {
 
 /// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
-    // generated Command for spawning when actually tracing
-    cmd: Command,
+    // configuration to be used during tracing
+    config: Confinement,
 
     // path to control groups for process restriction
     cgroups: PathBuf,
-
-    // encapsulates the `Pid` of the eventually running process
-    pid: Pid,
-
-    // optional policy that is to be enforced upon execution
-    policy: Option<Policy>,
-
-    // interfaces system call representation parsing
-    manager: SyscallManager,
 
     // if set, prints out each syscall dynamically
     verbose_trace: bool,
@@ -59,17 +53,7 @@ pub struct Tracer {
 impl Tracer {
     /// Instantiates a new `Tracer` capable of dynamically tracing a process under a containerized
     /// environment, and enforcing policy rules.
-    pub fn new(
-        args: Vec<String>,
-        policy: Option<Policy>,
-        verbose_trace: bool,
-    ) -> ConfineResult<Self> {
-        // create new unshare-wrapped command with arguments
-        let mut cmd = Command::new(&args[0]);
-        for arg in args.iter().skip(1) {
-            cmd.arg(arg);
-        }
-
+    pub fn new(config: Confinement, verbose_trace: bool) -> ConfineResult<Self> { 
         // initialize cgroup, check if supported in kernel
         let mut cgroups = PathBuf::from("/sys/fs/cgroup/pids");
         if !cgroups.exists() {
@@ -79,11 +63,8 @@ impl Tracer {
 
         // return mostly with default arguments that gets populated
         Ok(Self {
-            cmd,
+            config: Confinement,
             cgroups,
-            pid: Pid::from_raw(-1),
-            policy,
-            manager: SyscallManager::new().unwrap(),
             verbose_trace,
             report: ThreatReport::default(),
         })
@@ -91,12 +72,17 @@ impl Tracer {
 
     /// Encapsulates container runtime creation and process tracing execution under a callback that
     /// is cloned to run.
-    pub fn trace(&mut self) -> ConfineResult<()> {
+    pub fn run(&mut self) -> ConfineResult<()> {
+        // initialize child process stack
         let stack = &mut [0; 1024 * 1024];
-        let callback = Box::new(|| match self.exec_container_trace() {
-            Ok(res) => res,
-            Err(e) => {
-                panic!(e);
+
+        // create function callback for cloning, with error-handling
+        let callback = Box::new(|| {
+            if let Err(e) = self.exec_container_trace() {
+                error!("Cannot create container: {}", e);
+                -1
+            } else {
+                0
             }
         });
 
@@ -113,87 +99,27 @@ impl Tracer {
         Ok(())
     }
 
-    /*
-    fn better_container_env(&mut self) -> ConfineResult<()> {
-        // created isolated namespace by unsharing namespaces
-        let namespaces = vec![
-            Namespace::Mount,   // nable mounting child folders
-            Namespace::Pid,     // isolates process so that it appears as PID 1
-            Namespace::Uts,     // enables hostname to be changed
-            Namespace::User,    // unprvileged user to be root user
-            Namespace::Ipc,     // isolate message queues
-            Namespace::Cgroup,  // isolate cgroups
-        ];
-        println!("--> Unsharing namespaces for isolated child process.");
-        self.cmd.unshare(&namespaces);
-
-        // saving the CAP_SYS_PTRACE capability
-        let caps = vec![Capbility::CAP_SYS_PTRACE];
-        self.cmd.keep_caps(caps);
-
-        // chroot the rootfs mount
-        self.cmd.chroot_dir("rootfs");
-        Ok(())
-    }
-    */
-
-    /// Helper that instantiates a containerized environment before the execution of the actual
-    /// child process.
-    fn init_container_env(&mut self) -> ConfineResult<()> {
-        sched::unshare(sched::CloneFlags::CLONE_NEWNS)?;
-
-        // keep ptrace capabilities
-        unsafe {
-            let _ = libc::prctl(libc::SYS_ptrace as i32);
-        }
-
-        // initialize new cgroups directory if not found
-        if !self.cgroups.exists() {
-            println!("--> Initialize cgroups path for restricted resources.");
-            fs::create_dir_all(&self.cgroups)?;
-            let mut permission = fs::metadata(&self.cgroups)?.permissions();
-            permission.set_mode(511);
-            fs::set_permissions(&self.cgroups, permission).ok();
-        }
-
-        // write to new cgroups directory
-        fs::write(self.cgroups.join("pids.max"), b"20")?;
-        fs::write(self.cgroups.join("notify_on_release"), b"1")?;
-        fs::write(self.cgroups.join("cgroup.procs"), b"0")?;
-
-        // sets the hostname for the new isolated process
-        // TODO: make random string
-        println!("--> Using new hostname");
-        unistd::sethostname("confine")?;
-
-        // mount rootfs and go to root path
-        println!("--> Mounting rootfs to root path");
-        unistd::chroot("rootfs")?;
-        unistd::chdir("/")?;
-
-        // mount the proc file system
-        println!("--> Mounting procfs");
-        const NONE: Option<&'static [u8]> = None;
-        mount::mount(
-            Some("proc"),
-            "proc",
-            Some("proc"),
-            mount::MsFlags::empty(),
-            NONE,
-        )?;
-        Ok(())
-    }
-
     /// Executes a dynamic `ptrace`-based trace upon the given application specified. Will first
     /// instantiate a containerized environment with unshared namespaces and a seperately mounted
-    /// filesystem, and then spawn the tracee. If a `Policy` is specified, rules will also be
-    /// enforced.
+    /// filesystem, and then spawn the tracee.
     fn exec_container_trace(&mut self) -> ConfineResult<isize> {
-        // containerize the environment we are executing under
+        // create the container environment to execute processes under
         self.init_container_env()?;
 
+        // pull malware sample to container if `url` is set for config
+        match self.pull_sample()? {
+            Some(_) => {
+                println!("=> Pulling down malware sample from upstream source...");
+            }
+            _ => {}
+        }
+
+        // execute each step, creating a `Subprocess` for those that are marked to be traced
+        println!("=> Executing steps...");
+
+        /*
         // spawns a child process handler
-        println!("--> Spawning target executable in containerized environment");
+        println!("=> Spawning target executable in containerized environment");
         unsafe {
             self.cmd.pre_exec(traceme);
         }
@@ -221,7 +147,58 @@ impl Tracer {
 
         // print final trace while still in cloned process
         println!("{}", self.threat_trace()?);
+        */
         Ok(0)
+    }
+
+    /// Helper that instantiates a containerized environment before the execution of the actual
+    /// child process.
+    fn init_container_env(&mut self) -> ConfineResult<()> {
+        sched::unshare(sched::CloneFlags::CLONE_NEWNS)?;
+
+        // keep ptrace capabilities
+        unsafe {
+            let _ = libc::prctl(libc::SYS_ptrace as i32);
+        }
+
+        // initialize new cgroups directory if not found
+        if !self.cgroups.exists() {
+            println!("=> Initialize cgroups path for restricted resources.");
+            fs::create_dir_all(&self.cgroups)?;
+            let mut permission = fs::metadata(&self.cgroups)?.permissions();
+            permission.set_mode(511);
+            fs::set_permissions(&self.cgroups, permission).ok();
+        }
+
+        // write to new cgroups directory
+        fs::write(self.cgroups.join("pids.max"), b"20")?;
+        fs::write(self.cgroups.join("notify_on_release"), b"1")?;
+        fs::write(self.cgroups.join("cgroup.procs"), b"0")?;
+
+        // sets the hostname for the new isolated process
+        // TODO: make random string
+        println!("=> Using new hostname");
+        unistd::sethostname("confine")?;
+
+        // instantiate new path to tmpdir for container creation
+        println!("=> Creating ");
+
+        // mount rootfs and go to root path
+        println!("=> Mounting rootfs to root path");
+        unistd::chroot("rootfs")?;
+        unistd::chdir("/")?;
+
+        // mount the proc file system
+        println!("=> Mounting procfs");
+        const NONE: Option<&'static [u8]> = None;
+        mount::mount(
+            Some("proc"),
+            "proc",
+            Some("proc"),
+            mount::MsFlags::empty(),
+            NONE,
+        )?;
+        Ok(())
     }
 
     /// Helper that returns the register content given register state and calling convention index.
@@ -428,6 +405,36 @@ impl Drop for Tracer {
     fn drop(&mut self) {
         if self.cgroups.exists() {
             fs::remove_dir(&self.cgroups).expect("Cannot delete cgroups path");
+        }
+    }
+}
+
+
+struct Subprocess {
+    // command interface to start traced child
+    command: Command,
+
+    // stores the pid of the eventually running process being traced
+    pid: Pid,
+
+    // policy containing rules for enforcement
+    policy: Option<Policy>,
+
+    // interfaces system call representation parsing
+    manager: SyscallManager,
+}
+
+impl Subprocess {
+    fn new(args: Vec<String>, policy: Option<Policy>) -> Self {
+        let mut cmd = Command::new(&args[0]);
+        for arg in args.iter().skip(1) {
+            cmd.arg(arg);
+        }
+        Self {
+            cmd,
+            pid: Pid::from_raw(-1),
+            policy,
+            manager: SyscallManager::new().unwrap(),
         }
     }
 }
