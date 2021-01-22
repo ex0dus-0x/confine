@@ -8,6 +8,7 @@ use clap::{App, AppSettings, Arg};
 
 mod config;
 mod error;
+mod policy;
 mod syscall;
 mod threat;
 mod trace;

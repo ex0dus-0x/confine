@@ -109,7 +109,7 @@ impl ThreatReport {
                 let buffer: &str = syscall.args.get(&buf_key).unwrap().as_str().unwrap();
 
                 // add string to vector
-                if buffer != "" {
+                if !buffer.is_empty() {
                     self.strings.push(buffer.to_string());
                 }
 
