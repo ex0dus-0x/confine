@@ -1,6 +1,5 @@
 //! Defines modes of operation for syscall and library tracing. Provides several interfaces and
 //! wrappers to the `trace` submodule in order to allow convenient tracing.
-use nix::sys::signal::Signal;
 use nix::sys::{ptrace, wait};
 use nix::unistd::Pid;
 use nix::Error as NixError;
@@ -13,8 +12,10 @@ use std::io::Error as IOError;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
 
-use crate::policy::Policy;
+use crate::error::{ConfineError, ConfineResult};
+use crate::policy::{Action, Policy};
 use crate::syscall::{ArgMap, ParsedSyscall, SyscallManager};
+use crate::threat::ThreatReport;
 
 // Wraps nix's `ptrace::traceme()` to return a properly consumable IOError
 fn traceme() -> Result<(), IOError> {
@@ -26,12 +27,11 @@ fn traceme() -> Result<(), IOError> {
     }
 }
 
-
 /// Encapsulates a command that is to be traced under the container environment, storing syscall
 /// events and enforcing a policy as a "firewall".
-struct Subprocess {
+pub struct Subprocess {
     // command interface to start traced child
-    command: Command,
+    cmd: Command,
 
     // stores the pid of the eventually running process being traced
     pid: Pid,
@@ -41,10 +41,12 @@ struct Subprocess {
 
     // interfaces system call representation parsing
     manager: SyscallManager,
+
+    // generated final report for potential threats and IOCs
+    report: ThreatReport,
 }
 
 impl Subprocess {
-
     /// Creates new interface with the args to a command in a Confinement, and optionally a
     /// specified policy section.
     pub fn new(args: Vec<String>, policy: Option<Policy>) -> Self {
@@ -52,21 +54,27 @@ impl Subprocess {
         for arg in args.iter().skip(1) {
             cmd.arg(arg);
         }
+
+        // configure `PTRACE_TRACEME` to for debugger before tracing
+        unsafe {
+            cmd.pre_exec(traceme);
+        }
+
         Self {
             cmd,
             pid: Pid::from_raw(-1),
             policy,
             manager: SyscallManager::new().unwrap(),
+            report: ThreatReport::default(),
         }
     }
 
     /// Executes a trace on the specified command, stepping through each system call with `step()`.
     pub fn trace(&mut self) -> ConfineResult<()> {
         // spawns a child process handler
-        println!("=> Spawning target executable in containerized environment");
-        unsafe {
-            self.cmd.pre_exec(traceme);
-        }
+        log::info!("Spawning target executable in containerized environment");
+
+        log::trace!("Launching child process");
         let child = self.cmd.spawn()?;
 
         // create nix Pid, save state for later use
@@ -74,9 +82,11 @@ impl Subprocess {
 
         // configure options to trace for syscall interrupt
         // TODO: trace forked childrens
+        log::trace!("Running PTRACE_SETOPTIONS");
         ptrace::setoptions(self.pid, ptrace::Options::PTRACE_O_TRACESYSGOOD)?;
 
         // wait for process to change execution state
+        log::trace!("Waiting for process");
         wait::waitpid(self.pid, None)?;
 
         // run loop until broken by end of execution
@@ -93,28 +103,35 @@ impl Subprocess {
     /// when necessary.
     fn step(&mut self) -> ConfineResult<i32> {
         // encounter SYSCALL_ENTER
+        log::trace!("Stepping to next syscall event");
         ptrace::syscall(self.pid, None)?;
 
         // wait for status, return status if finished execution
+        log::trace!("Checking if process exited");
         if let wait::WaitStatus::Exited(_, stat) = wait::waitpid(self.pid, None)? {
             return Ok(stat);
         }
 
         // get register state as this point
+        log::trace!("Get state of registers set");
         let regstate: user_regs_struct = ptrace::getregs(self.pid)?;
 
         // get system call number for ORIG_RAX
         let syscall_num: u64 = regstate.orig_rax;
+        log::trace!("Syscall num parsed from ORIG_RAX: {}", syscall_num);
 
         // parse out arguments to read and write based on syscall table
+        log::trace!("Getting arguments for syscall from syscall table");
         let to_read: Vec<String> = self.manager.get_arguments(syscall_num).unwrap();
 
         // for each argument, get corresponding register in calling convention, and parse
         // accordingly based on the given type
         let mut args: ArgMap = ArgMap::new();
+
+        log::trace!("Parsing each argument given type from syscall table");
         for (idx, arg) in to_read.iter().enumerate() {
             // get contents of register in calling convention by index
-            let regval: u64 = Tracer::get_reg_idx(regstate, idx as i32);
+            let regval: u64 = Self::get_reg_idx(regstate, idx as i32);
             if regval == u64::MAX {
                 return Err(ConfineError::SystemError(NixError::invalid_argument()));
             }
@@ -135,17 +152,18 @@ impl Subprocess {
         // add syscall to manager
         let parsed: ParsedSyscall = self.manager.add_syscall(syscall_num, args)?;
 
-        if self.verbose_trace {
-            println!("{}", parsed);
-        }
+        log::info!("{}", parsed);
 
         // check to see if any system call behavior needs to be stored in our threat report
+        log::trace!("Checking if syscall is suspicious");
         self.report.check(&parsed)?;
 
         // encounter SYSCALL_EXIT
+        log::trace!("Step to end of syscall");
         ptrace::syscall(self.pid, None)?;
 
         // wait for status, return status if finished execution
+        log::trace!("Checking if process exited again");
         if let wait::WaitStatus::Exited(_, stat) = wait::waitpid(self.pid, None)? {
             return Ok(stat);
         }
@@ -164,22 +182,25 @@ impl Subprocess {
                 }
             };
 
+            log::trace!("Checking syscall `{}` against policy", name);
+
             // check if name is set as policy, and get enforcement
             if let Some(action) = policy.get_enforcement(&name) {
                 match action {
                     // print warning with syscall but continue execution
                     Action::Warn => {
-                        println!("confine: [WARN] encountered syscall {}", name);
+                        log::warn!("confine: [WARN] encountered syscall {}", name);
                     }
 
                     // halt execution immediately and return
                     Action::Block => {
-                        println!("confine: [BLOCK] encountered syscall {}", name);
+                        log::error!("confine: [BLOCK] encountered syscall {}", name);
                         return Ok(-1);
                     }
 
                     // write parsed syscall to log file
                     Action::Log => {
+                        log::trace!("Writing encountered syscall `{}` to log", name);
                         let parsed_syscall: ParsedSyscall = ParsedSyscall::new(name, args.clone());
                         policy.to_log(parsed_syscall)?;
                     }
@@ -276,4 +297,14 @@ impl Subprocess {
         Ok(json!(format!("0x{:x}", regval)))
     }
 
+    /// Generates a dump of the trace excluding arguments and including varying capabilities
+    /// for detecting potential IOCs
+    pub fn threat_trace(&mut self) -> ConfineResult<String> {
+        // populate threat report with syscalls traced
+        self.report.populate(&self.manager.syscalls)?;
+
+        // create final JSON threat report
+        let json = serde_json::to_string_pretty(&self.report)?;
+        Ok(json)
+    }
 }

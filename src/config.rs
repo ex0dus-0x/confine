@@ -70,11 +70,11 @@ impl Sample {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Step {
     // name identifier for the step
-    name: String,
+    pub name: String,
 
     // if set, dynamic tracing will occur during this step and output capabilities report
-    trace: Option<bool>,
+    pub trace: Option<bool>,
 
     // space seperated vector containing all components of the command to run
-    command: Vec<String>,
+    pub command: Vec<String>,
 }

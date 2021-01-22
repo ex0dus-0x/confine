@@ -16,16 +16,14 @@ mod trace;
 use crate::config::Confinement;
 use crate::trace::Tracer;
 
-fn run_trace(config: Confinement, verbose_trace: bool) -> Result<(), Box<dyn Error>> {
-    // create a new dynamic tracer, optionally with a policy path
-    let mut tracer: Tracer = Tracer::new(config, verbose_trace)?;
-
-    // execute trace with the given executable, output syscalls if `verbose_trace` is set
-    //tracer.trace()?;
+fn run_trace(config: Confinement) -> Result<(), Box<dyn Error>> {
+    let mut tracer: Tracer = Tracer::new(config)?;
+    tracer.run()?;
     Ok(())
 }
 
 fn main() {
+    pretty_env_logger::init();
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
@@ -36,38 +34,32 @@ fn main() {
                 .takes_value(true)
                 .required(true),
         )
-        .arg(
-            Arg::with_name("verbose_trace")
-                .help("Runs and output a standard trace against syscalls during execution.")
-                .short("v")
-                .long("verbose_trace")
-                .required(false),
-        )
+        // TODO: specify own mountpoint
         .get_matches();
 
     // get path to configuration to provision and execute
+    log::trace!("Checking path to `Confinement` configuration");
     let mut config_path: PathBuf = PathBuf::from(matches.value_of("PATH").unwrap());
     config_path.push("Confinement");
     if !config_path.exists() {
-        panic!(
+        log::error!(
             "Path containing `Confinement` doesn't exist: {:?}.",
             config_path
         );
     }
 
     // parse configuration from path
+    log::trace!("Parsing `Confinement` configuration");
     let config: Confinement = match Confinement::new(config_path) {
         Ok(config) => config,
-        Err(e) => {
-            panic!("{}", e);
+        Err(err) => {
+            log::error!("{}", err);
+            std::process::exit(-1);
         }
     };
 
-    // check if we are only running a simple trace
-    let verbose_trace: bool = matches.is_present("verbose_trace");
-
     // run trace depending on arguments specified
-    if let Err(err) = run_trace(config, verbose_trace) {
-        panic!("confine exception: {}", err);
+    if let Err(err) = run_trace(config) {
+        log::error!("{}", err);
     }
 }
