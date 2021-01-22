@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use clap::{App, AppSettings, Arg};
 
 mod config;
+mod container;
 mod error;
 mod policy;
 mod syscall;

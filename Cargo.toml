@@ -6,7 +6,6 @@ authors = ["ex0dus-0x <ex0dus@codemuch.tech>"]
 license = "MIT"
 
 homepage = "https://github.com/ex0dus-0x/confine"
-documentation = "https://docs.rs/confine"
 repository = "https://github.com/ex0dus-0x/confine"
 readme = "README.md"
 
