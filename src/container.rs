@@ -1,16 +1,18 @@
 //! Implements container runtime that is initialized before the execution of the tracee.
 use nix::{sched, unistd, mount};
 
-use std::fs;
+use std::{fs, env};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+
+use flate2::read::GzDecoder;
+use tar::Archive;
 
 use crate::error::ConfineResult;
 
 // represents url used to pull down the built rootfs for the container
 const UPSTREAM_ROOTFS_URL: &str =
     "https://dl-cdn.alpinelinux.org/alpine/v3.13/releases/x86_64/alpine-minirootfs-3.13.0-x86_64.tar.gz";
-
 
 /// Encapsulates implementation and resource deallocation of a container runtime.
 pub struct Container {
@@ -43,9 +45,9 @@ impl Container {
         };
 
         // defines path to tempdir
-        let mut mountpath: PathBuf = std::env::temp_dir();
-        mountpath.push("tmp_confine");
- 
+        let mut mountpath: PathBuf = env::temp_dir();
+        mountpath.push(format!("tmp_{}", hostname));
+
         Self {
             hostname,
             mountpath,
@@ -53,19 +55,41 @@ impl Container {
         }
     }
 
-    /// Helper that creates a randomly generated hostname.
+    /// Helper that creates a randomly generated hostname with the `names` crate.
     #[inline]
     fn gen_hostname() -> String {
-        todo!()
+        use names::{Generator, Name};
+        let mut generator = Generator::with_naming(Name::Numbered);
+        generator.next().unwrap().to_string()
+    }
+
+    /// Create a new tempdir, and untar the rootfs into the tempdir. Should be called before
+    /// actually starting the container to initialize the mountpoint state before entering the
+    /// restricted cloned process.
+    pub fn init_new_rootfs(&self) -> ConfineResult<()> {
+        log::trace!("Creating tempdir for mountpoint");
+        fs::create_dir(&self.mountpath)?;
+        env::set_current_dir(&self.mountpath)?;
+
+        log::trace!("Downloading alpine rootfs from upstream");
+        let rootfs_contents: String = ureq::get(UPSTREAM_ROOTFS_URL).call()?.into_string()?;
+
+        log::trace!("Unarchiving the tarball for the rootfs");
+        let tar = GzDecoder::new(rootfs_contents.as_bytes());
+        let mut archive = Archive::new(tar);
+        archive.unpack(".")?;
+        Ok(())
     }
 
 
+    /// Start the container runtime, creating the necessary cgroups configuration, mounts, and
+    /// unsharing namespaces.
     pub fn start(&mut self) -> ConfineResult<()> {
         log::info!("Unsharing namespaces...");
         sched::unshare(sched::CloneFlags::CLONE_NEWNS)?;
 
         // keep ptrace capabilities
-        log::info!("Tweaking capabilities...");
+        log::info!("Preserving capabilities...");
         unsafe {
             let _ = libc::prctl(libc::SYS_ptrace as i32);
         }
@@ -79,24 +103,18 @@ impl Container {
             fs::set_permissions(&self.cgroups, permission).ok();
         }
 
-        // write to new cgroups directory
         log::trace!("Writing to cgroups directory");
         fs::write(self.cgroups.join("pids.max"), b"20")?;
         fs::write(self.cgroups.join("notify_on_release"), b"1")?;
         fs::write(self.cgroups.join("cgroup.procs"), b"0")?;
 
-        // sets the hostname for the new isolated process
-        // TODO: make random string
-        log::info!("Generating new hostname for hostname...");
-        unistd::sethostname("confine")?;
+        log::info!("Setting new hostname `{}`...", self.hostname);
+        unistd::sethostname(&self.hostname)?;
 
-        // instantiate new path to tmpdir for container creation
-
-        // mount rootfs and go to root path
         log::info!("Mounting rootfs to root path...");
-        unistd::chroot("rootfs")?;
+        unistd::chroot(".")?;
 
-        log::trace!("Chrooting to / in rootfs");
+        log::trace!("Changing to `/` dir in rootfs");
         unistd::chdir("/")?;
 
         // mount the procfs in container to hide away host processes
@@ -117,8 +135,7 @@ impl Container {
             mount::MsFlags::empty(),
             None::<&str>,
         )?;
-
-       Ok(())
+        Ok(())
     }
 }
 

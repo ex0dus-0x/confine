@@ -18,9 +18,13 @@ lto = true
 
 [dependencies]
 clap = "2.33.0"
+names = { version = "0.11.0", default-features = false }
 
 log = "0.4"
 pretty_env_logger = "0.4"
+
+flate2 = "1.0.19"
+tar = "0.4.30"
 
 ureq = "2.0.1"
 

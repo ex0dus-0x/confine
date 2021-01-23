@@ -31,6 +31,9 @@ impl Tracer {
     /// Encapsulates container runtime creation and process tracing execution under a callback that
     /// is cloned to run.
     pub fn run(&mut self) -> ConfineResult<()> {
+        // create mountpoint dir before a seperate process is cloned
+        self.runtime.init_new_rootfs()?;
+
         // initialize child process stack
         let stack = &mut [0; 1024 * 1024];
 
