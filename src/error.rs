@@ -29,7 +29,6 @@ pub enum ConfineError {
 
     // ureq http req errors
     HttpError(ReqError),
-
 }
 
 impl Display for ConfineError {

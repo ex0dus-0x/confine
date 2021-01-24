@@ -1,10 +1,7 @@
-//! CLI interface for confine library modules. Implements tracing under two
-//! different modes, and provides deserialization support to serializable formats.
-
 use std::error::Error;
 use std::path::PathBuf;
 
-use clap::{App, AppSettings, Arg};
+use clap::{App, AppSettings, Arg, ArgMatches};
 
 mod config;
 mod container;
@@ -17,15 +14,16 @@ mod trace;
 use crate::config::Confinement;
 use crate::trace::Tracer;
 
-fn run_trace(config: Confinement) -> Result<(), Box<dyn Error>> {
-    let mut tracer: Tracer = Tracer::new(config)?;
-    tracer.run()?;
-    Ok(())
+fn main() {
+    let cli_args: ArgMatches = parse_args();
+    if let Err(err) = run(cli_args) {
+        log::error!("{}", err);
+        std::process::exit(-1);
+    }
 }
 
-fn main() {
-    pretty_env_logger::init();
-    let matches = App::new(env!("CARGO_PKG_NAME"))
+fn parse_args<'a>() -> ArgMatches<'a> {
+    App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -35,8 +33,27 @@ fn main() {
                 .takes_value(true)
                 .required(true),
         )
-        // TODO: specify own mountpoint
-        .get_matches();
+        .arg(
+            Arg::with_name("mount")
+                .help("Override mountpoint for custom rootfs instead of default Alpine.")
+                .long("mount")
+                .takes_value(true)
+                .value_name("ROOTFS")
+                .required(false),
+        )
+        .arg(
+            Arg::with_name("hostname")
+                .help("Set container hostname instead of randomly generating one.")
+                .long("hostname")
+                .takes_value(true)
+                .value_name("HOSTNAME")
+                .required(false),
+        )
+        .get_matches()
+}
+
+fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
+    pretty_env_logger::init();
 
     // get path to configuration to provision and execute
     log::trace!("Checking path to `Confinement` configuration");
@@ -59,8 +76,12 @@ fn main() {
         }
     };
 
-    // run trace depending on arguments specified
-    if let Err(err) = run_trace(config) {
-        log::error!("{}", err);
-    }
+    // other flags
+    let rootfs: Option<&str> = matches.value_of("mount");
+    let hostname: Option<&str> = matches.value_of("hostname");
+
+    log::info!("Starting new containerized tracer...");
+    let mut tracer: Tracer = Tracer::new(config, rootfs, hostname)?;
+    tracer.run()?;
+    Ok(())
 }

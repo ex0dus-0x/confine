@@ -1,9 +1,9 @@
 //! Implements container runtime that is initialized before the execution of the tracee.
-use nix::{sched, unistd, mount};
+use nix::{mount, sched, unistd};
 
-use std::{fs, env};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::{env, fs};
 
 use flate2::read::GzDecoder;
 use tar::Archive;
@@ -27,9 +27,9 @@ pub struct Container {
 }
 
 impl Container {
-    /// Initializes new `Container` with initial state of where resources are located 
+    /// Initializes new `Container` with initial state of where resources are located
     /// in the host filesystem.
-    pub fn new(_hostname: Option<&str>) -> Self {
+    pub fn init(rootfs: Option<&str>, _hostname: Option<&str>) -> ConfineResult<Self> {
         // initialize cgroup, check if supported in kernel
         let mut cgroups = PathBuf::from("/sys/fs/cgroup/pids");
         if !cgroups.exists() {
@@ -44,15 +44,24 @@ impl Container {
             None => Container::gen_hostname(),
         };
 
-        // defines path to tempdir
-        let mut mountpath: PathBuf = env::temp_dir();
-        mountpath.push(format!("tmp_{}", hostname));
+        // if mountpath isn't specified, create temp one with new rootfs immediately
+        let mountpath: PathBuf = match rootfs {
+            Some(path) => PathBuf::from(path),
+            None => {
+                let mut path = env::temp_dir();
+                path.push(format!("tmp_{}", hostname));
+                if let Err(e) = Self::init_new_rootfs(&path) {
+                    return Err(e);
+                }
+                path
+            }
+        };
 
-        Self {
+        Ok(Self {
             hostname,
             mountpath,
             cgroups,
-        }
+        })
     }
 
     /// Helper that creates a randomly generated hostname with the `names` crate.
@@ -60,19 +69,27 @@ impl Container {
     fn gen_hostname() -> String {
         use names::{Generator, Name};
         let mut generator = Generator::with_naming(Name::Numbered);
-        generator.next().unwrap().to_string()
+        generator.next().unwrap()
     }
 
     /// Create a new tempdir, and untar the rootfs into the tempdir. Should be called before
     /// actually starting the container to initialize the mountpoint state before entering the
     /// restricted cloned process.
-    pub fn init_new_rootfs(&self) -> ConfineResult<()> {
+    #[inline]
+    fn init_new_rootfs(rootfs: &PathBuf) -> ConfineResult<()> {
         log::trace!("Creating tempdir for mountpoint");
-        fs::create_dir(&self.mountpath)?;
-        env::set_current_dir(&self.mountpath)?;
+        fs::create_dir(rootfs)?;
+        env::set_current_dir(rootfs)?;
 
         log::trace!("Downloading alpine rootfs from upstream");
         let rootfs_contents: String = ureq::get(UPSTREAM_ROOTFS_URL).call()?.into_string()?;
+
+        /*
+        use std::io::Write;
+        log::trace!("Writing");
+        let mut f = fs::File::create("rootfs.tar.gz")?;
+        f.write_all(&rootfs_contents.as_bytes())?;
+        */
 
         log::trace!("Unarchiving the tarball for the rootfs");
         let tar = GzDecoder::new(rootfs_contents.as_bytes());
@@ -80,7 +97,6 @@ impl Container {
         archive.unpack(".")?;
         Ok(())
     }
-
 
     /// Start the container runtime, creating the necessary cgroups configuration, mounts, and
     /// unsharing namespaces.
@@ -112,7 +128,7 @@ impl Container {
         unistd::sethostname(&self.hostname)?;
 
         log::info!("Mounting rootfs to root path...");
-        unistd::chroot(".")?;
+        unistd::chroot(&self.mountpath)?;
 
         log::trace!("Changing to `/` dir in rootfs");
         unistd::chdir("/")?;
@@ -127,7 +143,7 @@ impl Container {
             None::<&str>,
         )?;
 
-        // mount tmpfs 
+        // mount tmpfs
         mount::mount(
             Some("tmpfs"),
             "/dev",

@@ -1,6 +1,6 @@
 //! Defines the main tracer that is interfaced against for execution of a configuration.
 use nix::sys::signal::Signal;
-use nix::{sched, mount};
+use nix::{mount, sched};
 
 mod subprocess;
 
@@ -21,19 +21,20 @@ pub struct Tracer {
 impl Tracer {
     /// Instantiates a new `Tracer` capable of dynamically tracing a process under a containerized
     /// environment, and enforcing policy rules.
-    pub fn new(config: Confinement) -> ConfineResult<Self> {
-        Ok(Self { 
-            config, 
-            runtime: Container::new(None),
+    pub fn new(
+        config: Confinement,
+        rootfs: Option<&str>,
+        hostname: Option<&str>,
+    ) -> ConfineResult<Self> {
+        Ok(Self {
+            config,
+            runtime: Container::init(rootfs, hostname)?,
         })
     }
 
     /// Encapsulates container runtime creation and process tracing execution under a callback that
     /// is cloned to run.
     pub fn run(&mut self) -> ConfineResult<()> {
-        // create mountpoint dir before a seperate process is cloned
-        self.runtime.init_new_rootfs()?;
-
         // initialize child process stack
         let stack = &mut [0; 1024 * 1024];
 
