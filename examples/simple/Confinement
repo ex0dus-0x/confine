@@ -18,12 +18,7 @@ enforce:
           action: BLOCK
 
 execution:
-    - name: build
-      trace: false
-      description: Initializes the executable to run
-      command: ["gcc", "example.c", "-o", "example"]
-
     - name: run
       trace: true
       description: Runs the sample
-      command: ["./example"]
+      command: ["/bin/ls"]

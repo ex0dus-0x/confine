@@ -104,6 +104,7 @@ version = "3.1.2"
 dependencies = [
  "clap",
  "flate2",
+ "lazy_static",
  "libc",
  "log",
  "names",

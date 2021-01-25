@@ -82,6 +82,8 @@ impl Tracer {
             if let Some(true) = step.trace {
                 log::info!("Running traced step {}: `{}`...", idx + 1, step.name);
                 let mut sb: Subprocess = Subprocess::new(cmd, self.config.policy.clone())?;
+
+                log::trace!("ptracing the child");
                 sb.trace()?;
 
                 // once done, output capabilities trace

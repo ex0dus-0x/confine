@@ -55,16 +55,19 @@ impl Subprocess {
             cmd.arg(arg);
         }
 
-        // configure `PTRACE_TRACEME` to for debugger before tracing
+        log::trace!("Configure PTRACE_TRACEME to be called for debugger");
         unsafe {
             cmd.pre_exec(traceme);
         }
+
+        log::trace!("Initializing syscall manager");
+        let manager = SyscallManager::new()?;
 
         Ok(Self {
             cmd,
             pid: Pid::from_raw(-1),
             policy,
-            manager: SyscallManager::new()?,
+            manager,
             report: ThreatReport::default(),
         })
     }
@@ -122,7 +125,7 @@ impl Subprocess {
 
         // parse out arguments to read and write based on syscall table
         log::trace!("Getting arguments for syscall from syscall table");
-        let to_read: Vec<String> = self.manager.get_arguments(syscall_num).unwrap();
+        let to_read: Vec<&str> = self.manager.get_arguments(syscall_num)?;
 
         // for each argument, get corresponding register in calling convention, and parse
         // accordingly based on the given type
@@ -137,7 +140,7 @@ impl Subprocess {
             }
 
             // get type and decide if further reading is necessary
-            let val: Value = self.parse_type(arg.as_str(), regval)?;
+            let val: Value = self.parse_type(arg, regval)?;
 
             // commit type and value mapping to hashmap
             args.insert(arg.to_string(), val);
@@ -175,7 +178,7 @@ impl Subprocess {
     fn enforce_policy(&mut self, syscall_num: u64, args: &ArgMap) -> ConfineResult<i32> {
         if let Some(policy) = &self.policy {
             // get the syscall name
-            let name: String = match self.manager.get_syscall_name(syscall_num) {
+            let name: &str = match self.manager.get_syscall_name(syscall_num) {
                 Some(name) => name,
                 None => {
                     return Err(ConfineError::SystemError(NixError::invalid_argument()));
@@ -201,7 +204,7 @@ impl Subprocess {
                     // write parsed syscall to log file
                     Action::Log => {
                         log::trace!("Writing encountered syscall `{}` to log", name);
-                        let parsed_syscall: ParsedSyscall = ParsedSyscall::new(name, args.clone());
+                        let parsed_syscall: ParsedSyscall = ParsedSyscall::new(name.to_string(), args.clone());
                         policy.to_log(parsed_syscall)?;
                     }
 
@@ -300,10 +303,7 @@ impl Subprocess {
     /// Generates a dump of the trace excluding arguments and including varying capabilities
     /// for detecting potential IOCs
     pub fn threat_trace(&mut self) -> ConfineResult<String> {
-        // populate threat report with syscalls traced
-        self.report.populate(&self.manager.syscalls)?;
-
-        // create final JSON threat report
+        self.report.populate(&self.manager.0)?;
         let json = serde_json::to_string_pretty(&self.report)?;
         Ok(json)
     }
