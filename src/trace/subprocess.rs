@@ -49,7 +49,7 @@ pub struct Subprocess {
 impl Subprocess {
     /// Creates new interface with the args to a command in a Confinement, and optionally a
     /// specified policy section.
-    pub fn new(args: Vec<String>, policy: Option<Policy>) -> Self {
+    pub fn new(args: Vec<String>, policy: Option<Policy>) -> ConfineResult<Self> {
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().skip(1) {
             cmd.arg(arg);
@@ -60,13 +60,13 @@ impl Subprocess {
             cmd.pre_exec(traceme);
         }
 
-        Self {
+        Ok(Self {
             cmd,
             pid: Pid::from_raw(-1),
             policy,
-            manager: SyscallManager::new().unwrap(),
+            manager: SyscallManager::new()?,
             report: ThreatReport::default(),
-        }
+        })
     }
 
     /// Executes a trace on the specified command, stepping through each system call with `step()`.

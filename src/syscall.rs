@@ -10,22 +10,6 @@ use std::path::PathBuf;
 
 use crate::error::{ConfineError, ConfineResult};
 
-/*
-/// Defines enum for various system call group, which classifies syscalls to groups that
-/// define generalized functionality.
-/// Inspired by: http://seclab.cs.sunysb.edu/sekar/papers/syscallclassif.htm
-#[derive(Deserialize, Debug, Clone)]
-pub enum SyscallGroup {
-    FileIO,
-    ProcessControl,
-    NetworkAccess,
-    MessageQueues,
-    SharedMemory,
-    TimeControl,
-    Ungrouped, // .. other miscellaneous system-related tasks
-}
-*/
-
 /// Maps argument names against the genericized value that is parsed
 pub type ArgMap = HashMap<String, Value>;
 
@@ -82,9 +66,7 @@ pub struct SyscallManager {
 impl SyscallManager {
     /// Generates syscall table to parse incoming system calls with
     pub fn new() -> ConfineResult<Self> {
-        let syscall_table = SyscallManager::parse_syscall_table().map_err(|_| {
-            ConfineError::SyscallError("cannot parse system call table".to_string())
-        })?;
+        let syscall_table = SyscallManager::parse_syscall_table()?;
         Ok(Self {
             syscalls: Vec::new(),
             syscall_table,

@@ -2,6 +2,8 @@
 use nix::sys::signal::Signal;
 use nix::{mount, sched};
 
+use std::process::Command;
+
 mod subprocess;
 
 use crate::config::Confinement;
@@ -41,7 +43,7 @@ impl Tracer {
         // create function callback for cloning, with error-handling
         let callback = Box::new(|| {
             if let Err(e) = self.exec_container_trace() {
-                log::error!("Cannot create container: {}", e);
+                log::error!("{}", e);
                 -1
             } else {
                 0
@@ -78,14 +80,20 @@ impl Tracer {
         for (idx, step) in self.config.execution.iter().enumerate() {
             let cmd: Vec<String> = step.command.clone();
             if let Some(true) = step.trace {
-                log::info!("Running traced step {}: `{}`", idx, step.name);
-                let mut sb: Subprocess = Subprocess::new(cmd, self.config.policy.clone());
+                log::info!("Running traced step {}: `{}`...", idx + 1, step.name);
+                let mut sb: Subprocess = Subprocess::new(cmd, self.config.policy.clone())?;
                 sb.trace()?;
 
                 // once done, output capabilities trace
                 println!("{}", sb.threat_trace()?);
             } else {
-                log::info!("Running step {}: `{}`", idx, step.name);
+                log::info!("Running un-traced step {}: `{}`...", idx + 1, step.name);
+                let mut exec: Command = Command::new(&cmd[0]);
+                for arg in cmd.iter().skip(1) {
+                    exec.arg(arg);
+                }
+                let status = exec.spawn()?.wait()?;
+                log::info!("Finished executing step {} with exit code {}", idx + 1, status);
             }
         }
 

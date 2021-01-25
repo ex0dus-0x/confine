@@ -68,13 +68,7 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
 
     // parse configuration from path
     log::trace!("Parsing `Confinement` configuration");
-    let config: Confinement = match Confinement::new(config_path) {
-        Ok(config) => config,
-        Err(err) => {
-            log::error!("{}", err);
-            std::process::exit(-1);
-        }
-    };
+    let config: Confinement = Confinement::new(config_path)?;
 
     // other flags
     let rootfs: Option<&str> = matches.value_of("mount");
