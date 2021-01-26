@@ -1,6 +1,5 @@
 //! Defines how system call representations are parsed from a given mapping configuration, and how
 //! a `SyscallManager` is instantiated to consume system call input from the confine tracer.
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -57,7 +56,7 @@ impl SyscallManager {
 
     /// Given a parsed syscall number from ORIG_RAX, get arguments for the specific system call
     /// such that tracer can appropriately read from memory addresses.
-    pub fn get_arguments(&mut self, number: u64) -> ConfineResult<Vec<&str>> {
+    pub fn get_arguments(&mut self, number: u64) -> ConfineResult<Vec<String>> {
         match SYSCALL_TABLE
             .iter()
             .position(|syscall| syscall.number == number)

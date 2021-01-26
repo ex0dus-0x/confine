@@ -125,7 +125,7 @@ impl Subprocess {
 
         // parse out arguments to read and write based on syscall table
         log::trace!("Getting arguments for syscall from syscall table");
-        let to_read: Vec<&str> = self.manager.get_arguments(syscall_num)?;
+        let to_read: Vec<String> = self.manager.get_arguments(syscall_num)?;
 
         // for each argument, get corresponding register in calling convention, and parse
         // accordingly based on the given type

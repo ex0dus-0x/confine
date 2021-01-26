@@ -1,13 +1,23 @@
 use lazy_static::lazy_static;
 use serde::{Serialize, Deserialize};
 
+// Hacky macro used to create Vec<String> for type arguments
+macro_rules! stringvec {
+    () => (
+        Vec::new()
+    );
+    ($($x:expr),+ $(,)?) => {
+        (vec![$($x.to_string()),+])
+    }
+}
+
 /// Represents a single system call definition, including its syscall number, name,
 /// and a vector of argument definitions.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Syscall {
     pub number: u64,
     pub name: &'static str,
-    pub args: Vec<&'static str>,
+    pub args: Vec<String>,
 }
 
 lazy_static! {
@@ -15,7 +25,7 @@ lazy_static! {
         Syscall {
             number: 0,
             name: "read",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "char *buf",
                 "size_t count"
@@ -24,7 +34,7 @@ lazy_static! {
         Syscall {
             number: 1,
             name: "write",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "char *buf",
                 "size_t count"
@@ -33,7 +43,7 @@ lazy_static! {
         Syscall {
             number: 2,
             name: "open",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "int flags",
                 "umode_t mode"
@@ -42,14 +52,14 @@ lazy_static! {
         Syscall {
             number: 3,
             name: "close",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd"
             ]
         },
         Syscall {
             number: 4,
             name: "stat",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "struct __old_kernel_stat *statbuf"
             ]
@@ -57,7 +67,7 @@ lazy_static! {
         Syscall {
             number: 5,
             name: "fstat",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "struct __old_kernel_stat *statbuf"
             ]
@@ -65,7 +75,7 @@ lazy_static! {
         Syscall {
             number: 6,
             name: "lstat",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "struct __old_kernel_stat *statbuf"
             ]
@@ -73,7 +83,7 @@ lazy_static! {
         Syscall {
             number: 7,
             name: "poll",
-            args: vec![
+            args: stringvec![
                 "struct pollfd *ufds",
                 "unsigned int nfds",
                 "int timeout"
@@ -82,7 +92,7 @@ lazy_static! {
         Syscall {
             number: 8,
             name: "lseek",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "off_t offset",
                 "unsigned int whence"
@@ -91,7 +101,7 @@ lazy_static! {
         Syscall {
             number: 9,
             name: "mmap",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -103,7 +113,7 @@ lazy_static! {
         Syscall {
             number: 10,
             name: "mprotect",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "size_t len",
                 "unsigned long prot"
@@ -112,7 +122,7 @@ lazy_static! {
         Syscall {
             number: 11,
             name: "munmap",
-            args: vec![
+            args: stringvec![
                 "unsigned long addr",
                 "size_t len"
             ]
@@ -120,14 +130,14 @@ lazy_static! {
         Syscall {
             number: 12,
             name: "brk",
-            args: vec![
+            args: stringvec![
                 "unsigned long brk"
             ]
         },
         Syscall {
             number: 13,
             name: "rt_sigaction",
-            args: vec![
+            args: stringvec![
                 "int",
                 "const struct sigaction *",
                 "struct sigaction *",
@@ -137,7 +147,7 @@ lazy_static! {
         Syscall {
             number: 14,
             name: "rt_sigprocmask",
-            args: vec![
+            args: stringvec![
                 "int how",
                 "sigset_t *set",
                 "sigset_t *oset",
@@ -147,7 +157,7 @@ lazy_static! {
         Syscall {
             number: 15,
             name: "rt_sigreturn",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -159,7 +169,7 @@ lazy_static! {
         Syscall {
             number: 16,
             name: "ioctl",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "unsigned int cmd",
                 "unsigned long arg"
@@ -168,7 +178,7 @@ lazy_static! {
         Syscall {
             number: 17,
             name: "pread64",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "char *buf",
                 "size_t count",
@@ -178,7 +188,7 @@ lazy_static! {
         Syscall {
             number: 18,
             name: "pwrite64",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "const char *buf",
                 "size_t count",
@@ -188,7 +198,7 @@ lazy_static! {
         Syscall {
             number: 19,
             name: "readv",
-            args: vec![
+            args: stringvec![
                 "unsigned long fd",
                 "const struct iovec *vec",
                 "unsigned long vlen"
@@ -197,7 +207,7 @@ lazy_static! {
         Syscall {
             number: 20,
             name: "writev",
-            args: vec![
+            args: stringvec![
                 "unsigned long fd",
                 "const struct iovec *vec",
                 "unsigned long vlen"
@@ -206,7 +216,7 @@ lazy_static! {
         Syscall {
             number: 21,
             name: "access",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "int mode"
             ]
@@ -214,14 +224,14 @@ lazy_static! {
         Syscall {
             number: 22,
             name: "pipe",
-            args: vec![
+            args: stringvec![
                 "int *fildes"
             ]
         },
         Syscall {
             number: 23,
             name: "select",
-            args: vec![
+            args: stringvec![
                 "int n",
                 "fd_set *inp",
                 "fd_set *outp",
@@ -232,12 +242,12 @@ lazy_static! {
         Syscall {
             number: 24,
             name: "sched_yield",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 25,
             name: "mremap",
-            args: vec![
+            args: stringvec![
                 "unsigned long addr",
                 "unsigned long old_len",
                 "unsigned long new_len",
@@ -248,7 +258,7 @@ lazy_static! {
         Syscall {
             number: 26,
             name: "msync",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "size_t len",
                 "int flags"
@@ -257,7 +267,7 @@ lazy_static! {
         Syscall {
             number: 27,
             name: "mincore",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "size_t len",
                 "unsigned char * vec"
@@ -266,7 +276,7 @@ lazy_static! {
         Syscall {
             number: 28,
             name: "madvise",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "size_t len",
                 "int behavior"
@@ -275,7 +285,7 @@ lazy_static! {
         Syscall {
             number: 29,
             name: "shmget",
-            args: vec![
+            args: stringvec![
                 "key_t key",
                 "size_t size",
                 "int flag"
@@ -284,7 +294,7 @@ lazy_static! {
         Syscall {
             number: 30,
             name: "shmat",
-            args: vec![
+            args: stringvec![
                 "int shmid",
                 "char *shmaddr",
                 "int shmflg"
@@ -293,7 +303,7 @@ lazy_static! {
         Syscall {
             number: 31,
             name: "shmctl",
-            args: vec![
+            args: stringvec![
                 "int shmid",
                 "int cmd",
                 "struct shmid_ds *buf"
@@ -302,14 +312,14 @@ lazy_static! {
         Syscall {
             number: 32,
             name: "dup",
-            args: vec![
+            args: stringvec![
                 "unsigned int fildes"
             ]
         },
         Syscall {
             number: 33,
             name: "dup2",
-            args: vec![
+            args: stringvec![
                 "unsigned int oldfd",
                 "unsigned int newfd"
             ]
@@ -317,12 +327,12 @@ lazy_static! {
         Syscall {
             number: 34,
             name: "pause",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 35,
             name: "nanosleep",
-            args: vec![
+            args: stringvec![
                 "struct __kernel_timespec *rqtp",
                 "struct __kernel_timespec *rmtp"
             ]
@@ -330,7 +340,7 @@ lazy_static! {
         Syscall {
             number: 36,
             name: "getitimer",
-            args: vec![
+            args: stringvec![
                 "int which",
                 "struct itimerval *value"
             ]
@@ -338,14 +348,14 @@ lazy_static! {
         Syscall {
             number: 37,
             name: "alarm",
-            args: vec![
+            args: stringvec![
                 "unsigned int seconds"
             ]
         },
         Syscall {
             number: 38,
             name: "setitimer",
-            args: vec![
+            args: stringvec![
                 "int which",
                 "struct itimerval *value",
                 "struct itimerval *ovalue"
@@ -354,12 +364,12 @@ lazy_static! {
         Syscall {
             number: 39,
             name: "getpid",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 40,
             name: "sendfile",
-            args: vec![
+            args: stringvec![
                 "int out_fd",
                 "int in_fd",
                 "off_t *offset",
@@ -369,7 +379,7 @@ lazy_static! {
         Syscall {
             number: 41,
             name: "socket",
-            args: vec![
+            args: stringvec![
                 "int",
                 "int",
                 "int"
@@ -378,7 +388,7 @@ lazy_static! {
         Syscall {
             number: 42,
             name: "connect",
-            args: vec![
+            args: stringvec![
                 "int",
                 "struct sockaddr *",
                 "int"
@@ -387,7 +397,7 @@ lazy_static! {
         Syscall {
             number: 43,
             name: "accept",
-            args: vec![
+            args: stringvec![
                 "int",
                 "struct sockaddr *",
                 "int *"
@@ -396,7 +406,7 @@ lazy_static! {
         Syscall {
             number: 44,
             name: "sendto",
-            args: vec![
+            args: stringvec![
                 "int",
                 "void *",
                 "size_t",
@@ -408,7 +418,7 @@ lazy_static! {
         Syscall {
             number: 45,
             name: "recvfrom",
-            args: vec![
+            args: stringvec![
                 "int",
                 "void *",
                 "size_t",
@@ -420,7 +430,7 @@ lazy_static! {
         Syscall {
             number: 46,
             name: "sendmsg",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "struct user_msghdr *msg",
                 "unsigned flags"
@@ -429,7 +439,7 @@ lazy_static! {
         Syscall {
             number: 47,
             name: "recvmsg",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "struct user_msghdr *msg",
                 "unsigned flags"
@@ -438,7 +448,7 @@ lazy_static! {
         Syscall {
             number: 48,
             name: "shutdown",
-            args: vec![
+            args: stringvec![
                 "int",
                 "int"
             ]
@@ -446,7 +456,7 @@ lazy_static! {
         Syscall {
             number: 49,
             name: "bind",
-            args: vec![
+            args: stringvec![
                 "int",
                 "struct sockaddr *",
                 "int"
@@ -455,7 +465,7 @@ lazy_static! {
         Syscall {
             number: 50,
             name: "listen",
-            args: vec![
+            args: stringvec![
                 "int",
                 "int"
             ]
@@ -463,7 +473,7 @@ lazy_static! {
         Syscall {
             number: 51,
             name: "getsockname",
-            args: vec![
+            args: stringvec![
                 "int",
                 "struct sockaddr *",
                 "int *"
@@ -472,7 +482,7 @@ lazy_static! {
         Syscall {
             number: 52,
             name: "getpeername",
-            args: vec![
+            args: stringvec![
                 "int",
                 "struct sockaddr *",
                 "int *"
@@ -481,7 +491,7 @@ lazy_static! {
         Syscall {
             number: 53,
             name: "socketpair",
-            args: vec![
+            args: stringvec![
                 "int",
                 "int",
                 "int",
@@ -491,7 +501,7 @@ lazy_static! {
         Syscall {
             number: 54,
             name: "setsockopt",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "int level",
                 "int optname",
@@ -502,7 +512,7 @@ lazy_static! {
         Syscall {
             number: 55,
             name: "getsockopt",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "int level",
                 "int optname",
@@ -513,7 +523,7 @@ lazy_static! {
         Syscall {
             number: 56,
             name: "clone",
-            args: vec![
+            args: stringvec![
                 "unsigned long",
                 "unsigned long",
                 "int *",
@@ -524,17 +534,17 @@ lazy_static! {
         Syscall {
             number: 57,
             name: "fork",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 58,
             name: "vfork",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 59,
             name: "execve",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "const char *const *argv",
                 "const char *const *envp"
@@ -543,14 +553,14 @@ lazy_static! {
         Syscall {
             number: 60,
             name: "exit",
-            args: vec![
+            args: stringvec![
                 "int error_code"
             ]
         },
         Syscall {
             number: 61,
             name: "wait4",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "int *stat_addr",
                 "int options",
@@ -560,7 +570,7 @@ lazy_static! {
         Syscall {
             number: 62,
             name: "kill",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "int sig"
             ]
@@ -568,14 +578,14 @@ lazy_static! {
         Syscall {
             number: 63,
             name: "uname",
-            args: vec![
+            args: stringvec![
                 "struct old_utsname *"
             ]
         },
         Syscall {
             number: 64,
             name: "semget",
-            args: vec![
+            args: stringvec![
                 "key_t key",
                 "int nsems",
                 "int semflg"
@@ -584,7 +594,7 @@ lazy_static! {
         Syscall {
             number: 65,
             name: "semop",
-            args: vec![
+            args: stringvec![
                 "int semid",
                 "struct sembuf *sops",
                 "unsigned nsops"
@@ -593,7 +603,7 @@ lazy_static! {
         Syscall {
             number: 66,
             name: "semctl",
-            args: vec![
+            args: stringvec![
                 "int semid",
                 "int semnum",
                 "int cmd",
@@ -603,14 +613,14 @@ lazy_static! {
         Syscall {
             number: 67,
             name: "shmdt",
-            args: vec![
+            args: stringvec![
                 "char *shmaddr"
             ]
         },
         Syscall {
             number: 68,
             name: "msgget",
-            args: vec![
+            args: stringvec![
                 "key_t key",
                 "int msgflg"
             ]
@@ -618,7 +628,7 @@ lazy_static! {
         Syscall {
             number: 69,
             name: "msgsnd",
-            args: vec![
+            args: stringvec![
                 "int msqid",
                 "struct msgbuf *msgp",
                 "size_t msgsz",
@@ -628,7 +638,7 @@ lazy_static! {
         Syscall {
             number: 70,
             name: "msgrcv",
-            args: vec![
+            args: stringvec![
                 "int msqid",
                 "struct msgbuf *msgp",
                 "size_t msgsz",
@@ -639,7 +649,7 @@ lazy_static! {
         Syscall {
             number: 71,
             name: "msgctl",
-            args: vec![
+            args: stringvec![
                 "int msqid",
                 "int cmd",
                 "struct msqid_ds *buf"
@@ -648,7 +658,7 @@ lazy_static! {
         Syscall {
             number: 72,
             name: "fcntl",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "unsigned int cmd",
                 "unsigned long arg"
@@ -657,7 +667,7 @@ lazy_static! {
         Syscall {
             number: 73,
             name: "flock",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "unsigned int cmd"
             ]
@@ -665,21 +675,21 @@ lazy_static! {
         Syscall {
             number: 74,
             name: "fsync",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd"
             ]
         },
         Syscall {
             number: 75,
             name: "fdatasync",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd"
             ]
         },
         Syscall {
             number: 76,
             name: "truncate",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "long length"
             ]
@@ -687,7 +697,7 @@ lazy_static! {
         Syscall {
             number: 77,
             name: "ftruncate",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "unsigned long length"
             ]
@@ -695,7 +705,7 @@ lazy_static! {
         Syscall {
             number: 78,
             name: "getdents",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "struct linux_dirent *dirent",
                 "unsigned int count"
@@ -704,7 +714,7 @@ lazy_static! {
         Syscall {
             number: 79,
             name: "getcwd",
-            args: vec![
+            args: stringvec![
                 "char *buf",
                 "unsigned long size"
             ]
@@ -712,21 +722,21 @@ lazy_static! {
         Syscall {
             number: 80,
             name: "chdir",
-            args: vec![
+            args: stringvec![
                 "const char *filename"
             ]
         },
         Syscall {
             number: 81,
             name: "fchdir",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd"
             ]
         },
         Syscall {
             number: 82,
             name: "rename",
-            args: vec![
+            args: stringvec![
                 "const char *oldname",
                 "const char *newname"
             ]
@@ -734,7 +744,7 @@ lazy_static! {
         Syscall {
             number: 83,
             name: "mkdir",
-            args: vec![
+            args: stringvec![
                 "const char *pathname",
                 "umode_t mode"
             ]
@@ -742,14 +752,14 @@ lazy_static! {
         Syscall {
             number: 84,
             name: "rmdir",
-            args: vec![
+            args: stringvec![
                 "const char *pathname"
             ]
         },
         Syscall {
             number: 85,
             name: "creat",
-            args: vec![
+            args: stringvec![
                 "const char *pathname",
                 "umode_t mode"
             ]
@@ -757,7 +767,7 @@ lazy_static! {
         Syscall {
             number: 86,
             name: "link",
-            args: vec![
+            args: stringvec![
                 "const char *oldname",
                 "const char *newname"
             ]
@@ -765,14 +775,14 @@ lazy_static! {
         Syscall {
             number: 87,
             name: "unlink",
-            args: vec![
+            args: stringvec![
                 "const char *pathname"
             ]
         },
         Syscall {
             number: 88,
             name: "symlink",
-            args: vec![
+            args: stringvec![
                 "const char *old",
                 "const char *new"
             ]
@@ -780,7 +790,7 @@ lazy_static! {
         Syscall {
             number: 89,
             name: "readlink",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "char *buf",
                 "int bufsiz"
@@ -789,7 +799,7 @@ lazy_static! {
         Syscall {
             number: 90,
             name: "chmod",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "umode_t mode"
             ]
@@ -797,7 +807,7 @@ lazy_static! {
         Syscall {
             number: 91,
             name: "fchmod",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "umode_t mode"
             ]
@@ -805,7 +815,7 @@ lazy_static! {
         Syscall {
             number: 92,
             name: "chown",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "uid_t user",
                 "gid_t group"
@@ -814,7 +824,7 @@ lazy_static! {
         Syscall {
             number: 93,
             name: "fchown",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "uid_t user",
                 "gid_t group"
@@ -823,7 +833,7 @@ lazy_static! {
         Syscall {
             number: 94,
             name: "lchown",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "uid_t user",
                 "gid_t group"
@@ -832,14 +842,14 @@ lazy_static! {
         Syscall {
             number: 95,
             name: "umask",
-            args: vec![
+            args: stringvec![
                 "int mask"
             ]
         },
         Syscall {
             number: 96,
             name: "gettimeofday",
-            args: vec![
+            args: stringvec![
                 "struct timeval *tv",
                 "struct timezone *tz"
             ]
@@ -847,7 +857,7 @@ lazy_static! {
         Syscall {
             number: 97,
             name: "getrlimit",
-            args: vec![
+            args: stringvec![
                 "unsigned int resource",
                 "struct rlimit *rlim"
             ]
@@ -855,7 +865,7 @@ lazy_static! {
         Syscall {
             number: 98,
             name: "getrusage",
-            args: vec![
+            args: stringvec![
                 "int who",
                 "struct rusage *ru"
             ]
@@ -863,21 +873,21 @@ lazy_static! {
         Syscall {
             number: 99,
             name: "sysinfo",
-            args: vec![
+            args: stringvec![
                 "struct sysinfo *info"
             ]
         },
         Syscall {
             number: 100,
             name: "times",
-            args: vec![
+            args: stringvec![
                 "struct tms *tbuf"
             ]
         },
         Syscall {
             number: 101,
             name: "ptrace",
-            args: vec![
+            args: stringvec![
                 "long request",
                 "long pid",
                 "unsigned long addr",
@@ -887,12 +897,12 @@ lazy_static! {
         Syscall {
             number: 102,
             name: "getuid",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 103,
             name: "syslog",
-            args: vec![
+            args: stringvec![
                 "int type",
                 "char *buf",
                 "int len"
@@ -901,36 +911,36 @@ lazy_static! {
         Syscall {
             number: 104,
             name: "getgid",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 105,
             name: "setuid",
-            args: vec![
+            args: stringvec![
                 "uid_t uid"
             ]
         },
         Syscall {
             number: 106,
             name: "setgid",
-            args: vec![
+            args: stringvec![
                 "gid_t gid"
             ]
         },
         Syscall {
             number: 107,
             name: "geteuid",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 108,
             name: "getegid",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 109,
             name: "setpgid",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "pid_t pgid"
             ]
@@ -938,22 +948,22 @@ lazy_static! {
         Syscall {
             number: 110,
             name: "getppid",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 111,
             name: "getpgrp",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 112,
             name: "setsid",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 113,
             name: "setreuid",
-            args: vec![
+            args: stringvec![
                 "uid_t ruid",
                 "uid_t euid"
             ]
@@ -961,7 +971,7 @@ lazy_static! {
         Syscall {
             number: 114,
             name: "setregid",
-            args: vec![
+            args: stringvec![
                 "gid_t rgid",
                 "gid_t egid"
             ]
@@ -969,7 +979,7 @@ lazy_static! {
         Syscall {
             number: 115,
             name: "getgroups",
-            args: vec![
+            args: stringvec![
                 "int gidsetsize",
                 "gid_t *grouplist"
             ]
@@ -977,7 +987,7 @@ lazy_static! {
         Syscall {
             number: 116,
             name: "setgroups",
-            args: vec![
+            args: stringvec![
                 "int gidsetsize",
                 "gid_t *grouplist"
             ]
@@ -985,7 +995,7 @@ lazy_static! {
         Syscall {
             number: 117,
             name: "setresuid",
-            args: vec![
+            args: stringvec![
                 "uid_t ruid",
                 "uid_t euid",
                 "uid_t suid"
@@ -994,7 +1004,7 @@ lazy_static! {
         Syscall {
             number: 118,
             name: "getresuid",
-            args: vec![
+            args: stringvec![
                 "uid_t *ruid",
                 "uid_t *euid",
                 "uid_t *suid"
@@ -1003,7 +1013,7 @@ lazy_static! {
         Syscall {
             number: 119,
             name: "setresgid",
-            args: vec![
+            args: stringvec![
                 "gid_t rgid",
                 "gid_t egid",
                 "gid_t sgid"
@@ -1012,7 +1022,7 @@ lazy_static! {
         Syscall {
             number: 120,
             name: "getresgid",
-            args: vec![
+            args: stringvec![
                 "gid_t *rgid",
                 "gid_t *egid",
                 "gid_t *sgid"
@@ -1021,35 +1031,35 @@ lazy_static! {
         Syscall {
             number: 121,
             name: "getpgid",
-            args: vec![
+            args: stringvec![
                 "pid_t pid"
             ]
         },
         Syscall {
             number: 122,
             name: "setfsuid",
-            args: vec![
+            args: stringvec![
                 "uid_t uid"
             ]
         },
         Syscall {
             number: 123,
             name: "setfsgid",
-            args: vec![
+            args: stringvec![
                 "gid_t gid"
             ]
         },
         Syscall {
             number: 124,
             name: "getsid",
-            args: vec![
+            args: stringvec![
                 "pid_t pid"
             ]
         },
         Syscall {
             number: 125,
             name: "capget",
-            args: vec![
+            args: stringvec![
                 "cap_user_header_t header",
                 "cap_user_data_t dataptr"
             ]
@@ -1057,7 +1067,7 @@ lazy_static! {
         Syscall {
             number: 126,
             name: "capset",
-            args: vec![
+            args: stringvec![
                 "cap_user_header_t header",
                 "const cap_user_data_t data"
             ]
@@ -1065,7 +1075,7 @@ lazy_static! {
         Syscall {
             number: 127,
             name: "rt_sigpending",
-            args: vec![
+            args: stringvec![
                 "sigset_t *set",
                 "size_t sigsetsize"
             ]
@@ -1073,7 +1083,7 @@ lazy_static! {
         Syscall {
             number: 128,
             name: "rt_sigtimedwait",
-            args: vec![
+            args: stringvec![
                 "const sigset_t *uthese",
                 "siginfo_t *uinfo",
                 "const struct __kernel_timespec *uts",
@@ -1083,7 +1093,7 @@ lazy_static! {
         Syscall {
             number: 129,
             name: "rt_sigqueueinfo",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "int sig",
                 "siginfo_t *uinfo"
@@ -1092,7 +1102,7 @@ lazy_static! {
         Syscall {
             number: 130,
             name: "rt_sigsuspend",
-            args: vec![
+            args: stringvec![
                 "sigset_t *unewset",
                 "size_t sigsetsize"
             ]
@@ -1100,7 +1110,7 @@ lazy_static! {
         Syscall {
             number: 131,
             name: "sigaltstack",
-            args: vec![
+            args: stringvec![
                 "const struct sigaltstack *uss",
                 "struct sigaltstack *uoss"
             ]
@@ -1108,7 +1118,7 @@ lazy_static! {
         Syscall {
             number: 132,
             name: "utime",
-            args: vec![
+            args: stringvec![
                 "char *filename",
                 "struct utimbuf *times"
             ]
@@ -1116,7 +1126,7 @@ lazy_static! {
         Syscall {
             number: 133,
             name: "mknod",
-            args: vec![
+            args: stringvec![
                 "const char *filename",
                 "umode_t mode",
                 "unsigned dev"
@@ -1125,21 +1135,21 @@ lazy_static! {
         Syscall {
             number: 134,
             name: "uselib",
-            args: vec![
+            args: stringvec![
                 "const char *library"
             ]
         },
         Syscall {
             number: 135,
             name: "personality",
-            args: vec![
+            args: stringvec![
                 "unsigned int personality"
             ]
         },
         Syscall {
             number: 136,
             name: "ustat",
-            args: vec![
+            args: stringvec![
                 "unsigned dev",
                 "struct ustat *ubuf"
             ]
@@ -1147,7 +1157,7 @@ lazy_static! {
         Syscall {
             number: 137,
             name: "statfs",
-            args: vec![
+            args: stringvec![
                 "const char * path",
                 "struct statfs *buf"
             ]
@@ -1155,7 +1165,7 @@ lazy_static! {
         Syscall {
             number: 138,
             name: "fstatfs",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "struct statfs *buf"
             ]
@@ -1163,7 +1173,7 @@ lazy_static! {
         Syscall {
             number: 139,
             name: "sysfs",
-            args: vec![
+            args: stringvec![
                 "int option",
                 "unsigned long arg1",
                 "unsigned long arg2"
@@ -1172,7 +1182,7 @@ lazy_static! {
         Syscall {
             number: 140,
             name: "getpriority",
-            args: vec![
+            args: stringvec![
                 "int which",
                 "int who"
             ]
@@ -1180,7 +1190,7 @@ lazy_static! {
         Syscall {
             number: 141,
             name: "setpriority",
-            args: vec![
+            args: stringvec![
                 "int which",
                 "int who",
                 "int niceval"
@@ -1189,7 +1199,7 @@ lazy_static! {
         Syscall {
             number: 142,
             name: "sched_setparam",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "struct sched_param *param"
             ]
@@ -1197,7 +1207,7 @@ lazy_static! {
         Syscall {
             number: 143,
             name: "sched_getparam",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "struct sched_param *param"
             ]
@@ -1205,7 +1215,7 @@ lazy_static! {
         Syscall {
             number: 144,
             name: "sched_setscheduler",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "int policy",
                 "struct sched_param *param"
@@ -1214,28 +1224,28 @@ lazy_static! {
         Syscall {
             number: 145,
             name: "sched_getscheduler",
-            args: vec![
+            args: stringvec![
                 "pid_t pid"
             ]
         },
         Syscall {
             number: 146,
             name: "sched_get_priority_max",
-            args: vec![
+            args: stringvec![
                 "int policy"
             ]
         },
         Syscall {
             number: 147,
             name: "sched_get_priority_min",
-            args: vec![
+            args: stringvec![
                 "int policy"
             ]
         },
         Syscall {
             number: 148,
             name: "sched_rr_get_interval",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "struct __kernel_timespec *interval"
             ]
@@ -1243,7 +1253,7 @@ lazy_static! {
         Syscall {
             number: 149,
             name: "mlock",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "size_t len"
             ]
@@ -1251,7 +1261,7 @@ lazy_static! {
         Syscall {
             number: 150,
             name: "munlock",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "size_t len"
             ]
@@ -1259,24 +1269,24 @@ lazy_static! {
         Syscall {
             number: 151,
             name: "mlockall",
-            args: vec![
+            args: stringvec![
                 "int flags"
             ]
         },
         Syscall {
             number: 152,
             name: "munlockall",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 153,
             name: "vhangup",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 154,
             name: "modify_ldt",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1288,7 +1298,7 @@ lazy_static! {
         Syscall {
             number: 155,
             name: "pivot_root",
-            args: vec![
+            args: stringvec![
                 "const char *new_root",
                 "const char *put_old"
             ]
@@ -1296,7 +1306,7 @@ lazy_static! {
         Syscall {
             number: 156,
             name: "_sysctl",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1308,7 +1318,7 @@ lazy_static! {
         Syscall {
             number: 157,
             name: "prctl",
-            args: vec![
+            args: stringvec![
                 "int option",
                 "unsigned long arg2",
                 "unsigned long arg3",
@@ -1319,7 +1329,7 @@ lazy_static! {
         Syscall {
             number: 158,
             name: "arch_prctl",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1331,14 +1341,14 @@ lazy_static! {
         Syscall {
             number: 159,
             name: "adjtimex",
-            args: vec![
+            args: stringvec![
                 "struct __kernel_timex *txc_p"
             ]
         },
         Syscall {
             number: 160,
             name: "setrlimit",
-            args: vec![
+            args: stringvec![
                 "unsigned int resource",
                 "struct rlimit *rlim"
             ]
@@ -1346,26 +1356,26 @@ lazy_static! {
         Syscall {
             number: 161,
             name: "chroot",
-            args: vec![
+            args: stringvec![
                 "const char *filename"
             ]
         },
         Syscall {
             number: 162,
             name: "sync",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 163,
             name: "acct",
-            args: vec![
+            args: stringvec![
                 "const char *name"
             ]
         },
         Syscall {
             number: 164,
             name: "settimeofday",
-            args: vec![
+            args: stringvec![
                 "struct timeval *tv",
                 "struct timezone *tz"
             ]
@@ -1373,7 +1383,7 @@ lazy_static! {
         Syscall {
             number: 165,
             name: "mount",
-            args: vec![
+            args: stringvec![
                 "char *dev_name",
                 "char *dir_name",
                 "char *type",
@@ -1384,7 +1394,7 @@ lazy_static! {
         Syscall {
             number: 166,
             name: "umount2",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1396,7 +1406,7 @@ lazy_static! {
         Syscall {
             number: 167,
             name: "swapon",
-            args: vec![
+            args: stringvec![
                 "const char *specialfile",
                 "int swap_flags"
             ]
@@ -1404,14 +1414,14 @@ lazy_static! {
         Syscall {
             number: 168,
             name: "swapoff",
-            args: vec![
+            args: stringvec![
                 "const char *specialfile"
             ]
         },
         Syscall {
             number: 169,
             name: "reboot",
-            args: vec![
+            args: stringvec![
                 "int magic1",
                 "int magic2",
                 "unsigned int cmd",
@@ -1421,7 +1431,7 @@ lazy_static! {
         Syscall {
             number: 170,
             name: "sethostname",
-            args: vec![
+            args: stringvec![
                 "char *name",
                 "int len"
             ]
@@ -1429,7 +1439,7 @@ lazy_static! {
         Syscall {
             number: 171,
             name: "setdomainname",
-            args: vec![
+            args: stringvec![
                 "char *name",
                 "int len"
             ]
@@ -1437,7 +1447,7 @@ lazy_static! {
         Syscall {
             number: 172,
             name: "iopl",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1449,7 +1459,7 @@ lazy_static! {
         Syscall {
             number: 173,
             name: "ioperm",
-            args: vec![
+            args: stringvec![
                 "unsigned long from",
                 "unsigned long num",
                 "int on"
@@ -1458,7 +1468,7 @@ lazy_static! {
         Syscall {
             number: 174,
             name: "create_module",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1470,7 +1480,7 @@ lazy_static! {
         Syscall {
             number: 175,
             name: "init_module",
-            args: vec![
+            args: stringvec![
                 "void *umod",
                 "unsigned long len",
                 "const char *uargs"
@@ -1479,7 +1489,7 @@ lazy_static! {
         Syscall {
             number: 176,
             name: "delete_module",
-            args: vec![
+            args: stringvec![
                 "const char *name_user",
                 "unsigned int flags"
             ]
@@ -1487,7 +1497,7 @@ lazy_static! {
         Syscall {
             number: 177,
             name: "get_kernel_syms",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1499,7 +1509,7 @@ lazy_static! {
         Syscall {
             number: 178,
             name: "query_module",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1511,7 +1521,7 @@ lazy_static! {
         Syscall {
             number: 179,
             name: "quotactl",
-            args: vec![
+            args: stringvec![
                 "unsigned int cmd",
                 "const char *special",
                 "qid_t id",
@@ -1521,7 +1531,7 @@ lazy_static! {
         Syscall {
             number: 180,
             name: "nfsservctl",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1533,7 +1543,7 @@ lazy_static! {
         Syscall {
             number: 181,
             name: "getpmsg",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1545,7 +1555,7 @@ lazy_static! {
         Syscall {
             number: 182,
             name: "putpmsg",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1557,7 +1567,7 @@ lazy_static! {
         Syscall {
             number: 183,
             name: "afs_syscall",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1569,7 +1579,7 @@ lazy_static! {
         Syscall {
             number: 184,
             name: "tuxcall",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1581,7 +1591,7 @@ lazy_static! {
         Syscall {
             number: 185,
             name: "security",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1593,12 +1603,12 @@ lazy_static! {
         Syscall {
             number: 186,
             name: "gettid",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 187,
             name: "readahead",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "loff_t offset",
                 "size_t count"
@@ -1607,7 +1617,7 @@ lazy_static! {
         Syscall {
             number: 188,
             name: "setxattr",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "const char *name",
                 "const void *value",
@@ -1618,7 +1628,7 @@ lazy_static! {
         Syscall {
             number: 189,
             name: "lsetxattr",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "const char *name",
                 "const void *value",
@@ -1629,7 +1639,7 @@ lazy_static! {
         Syscall {
             number: 190,
             name: "fsetxattr",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "const char *name",
                 "const void *value",
@@ -1640,7 +1650,7 @@ lazy_static! {
         Syscall {
             number: 191,
             name: "getxattr",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "const char *name",
                 "void *value",
@@ -1650,7 +1660,7 @@ lazy_static! {
         Syscall {
             number: 192,
             name: "lgetxattr",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "const char *name",
                 "void *value",
@@ -1660,7 +1670,7 @@ lazy_static! {
         Syscall {
             number: 193,
             name: "fgetxattr",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "const char *name",
                 "void *value",
@@ -1670,7 +1680,7 @@ lazy_static! {
         Syscall {
             number: 194,
             name: "listxattr",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "char *list",
                 "size_t size"
@@ -1679,7 +1689,7 @@ lazy_static! {
         Syscall {
             number: 195,
             name: "llistxattr",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "char *list",
                 "size_t size"
@@ -1688,7 +1698,7 @@ lazy_static! {
         Syscall {
             number: 196,
             name: "flistxattr",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "char *list",
                 "size_t size"
@@ -1697,7 +1707,7 @@ lazy_static! {
         Syscall {
             number: 197,
             name: "removexattr",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "const char *name"
             ]
@@ -1705,7 +1715,7 @@ lazy_static! {
         Syscall {
             number: 198,
             name: "lremovexattr",
-            args: vec![
+            args: stringvec![
                 "const char *path",
                 "const char *name"
             ]
@@ -1713,7 +1723,7 @@ lazy_static! {
         Syscall {
             number: 199,
             name: "fremovexattr",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "const char *name"
             ]
@@ -1721,7 +1731,7 @@ lazy_static! {
         Syscall {
             number: 200,
             name: "tkill",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "int sig"
             ]
@@ -1729,14 +1739,14 @@ lazy_static! {
         Syscall {
             number: 201,
             name: "time",
-            args: vec![
+            args: stringvec![
                 "time_t *tloc"
             ]
         },
         Syscall {
             number: 202,
             name: "futex",
-            args: vec![
+            args: stringvec![
                 "u32 *uaddr",
                 "int op",
                 "u32 val",
@@ -1748,7 +1758,7 @@ lazy_static! {
         Syscall {
             number: 203,
             name: "sched_setaffinity",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "unsigned int len",
                 "unsigned long *user_mask_ptr"
@@ -1757,7 +1767,7 @@ lazy_static! {
         Syscall {
             number: 204,
             name: "sched_getaffinity",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "unsigned int len",
                 "unsigned long *user_mask_ptr"
@@ -1766,7 +1776,7 @@ lazy_static! {
         Syscall {
             number: 205,
             name: "set_thread_area",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1778,7 +1788,7 @@ lazy_static! {
         Syscall {
             number: 206,
             name: "io_setup",
-            args: vec![
+            args: stringvec![
                 "unsigned nr_reqs",
                 "aio_context_t *ctx"
             ]
@@ -1786,14 +1796,14 @@ lazy_static! {
         Syscall {
             number: 207,
             name: "io_destroy",
-            args: vec![
+            args: stringvec![
                 "aio_context_t ctx"
             ]
         },
         Syscall {
             number: 208,
             name: "io_getevents",
-            args: vec![
+            args: stringvec![
                 "aio_context_t ctx_id",
                 "long min_nr",
                 "long nr",
@@ -1804,7 +1814,7 @@ lazy_static! {
         Syscall {
             number: 209,
             name: "io_submit",
-            args: vec![
+            args: stringvec![
                 "aio_context_t",
                 "long",
                 "struct iocb * *"
@@ -1813,7 +1823,7 @@ lazy_static! {
         Syscall {
             number: 210,
             name: "io_cancel",
-            args: vec![
+            args: stringvec![
                 "aio_context_t ctx_id",
                 "struct iocb *iocb",
                 "struct io_event *result"
@@ -1822,7 +1832,7 @@ lazy_static! {
         Syscall {
             number: 211,
             name: "get_thread_area",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1834,7 +1844,7 @@ lazy_static! {
         Syscall {
             number: 212,
             name: "lookup_dcookie",
-            args: vec![
+            args: stringvec![
                 "u64 cookie64",
                 "char *buf",
                 "size_t len"
@@ -1843,14 +1853,14 @@ lazy_static! {
         Syscall {
             number: 213,
             name: "epoll_create",
-            args: vec![
+            args: stringvec![
                 "int size"
             ]
         },
         Syscall {
             number: 214,
             name: "epoll_ctl_old",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1862,7 +1872,7 @@ lazy_static! {
         Syscall {
             number: 215,
             name: "epoll_wait_old",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -1874,7 +1884,7 @@ lazy_static! {
         Syscall {
             number: 216,
             name: "remap_file_pages",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "unsigned long size",
                 "unsigned long prot",
@@ -1885,7 +1895,7 @@ lazy_static! {
         Syscall {
             number: 217,
             name: "getdents64",
-            args: vec![
+            args: stringvec![
                 "unsigned int fd",
                 "struct linux_dirent64 *dirent",
                 "unsigned int count"
@@ -1894,19 +1904,19 @@ lazy_static! {
         Syscall {
             number: 218,
             name: "set_tid_address",
-            args: vec![
+            args: stringvec![
                 "int *tidptr"
             ]
         },
         Syscall {
             number: 219,
             name: "restart_syscall",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 220,
             name: "semtimedop",
-            args: vec![
+            args: stringvec![
                 "int semid",
                 "struct sembuf *sops",
                 "unsigned nsops",
@@ -1916,7 +1926,7 @@ lazy_static! {
         Syscall {
             number: 221,
             name: "fadvise64",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "loff_t offset",
                 "size_t len",
@@ -1926,7 +1936,7 @@ lazy_static! {
         Syscall {
             number: 222,
             name: "timer_create",
-            args: vec![
+            args: stringvec![
                 "clockid_t which_clock",
                 "struct sigevent *timer_event_spec",
                 "timer_t * created_timer_id"
@@ -1935,7 +1945,7 @@ lazy_static! {
         Syscall {
             number: 223,
             name: "timer_settime",
-            args: vec![
+            args: stringvec![
                 "timer_t timer_id",
                 "int flags",
                 "const struct __kernel_itimerspec *new_setting",
@@ -1945,7 +1955,7 @@ lazy_static! {
         Syscall {
             number: 224,
             name: "timer_gettime",
-            args: vec![
+            args: stringvec![
                 "timer_t timer_id",
                 "struct __kernel_itimerspec *setting"
             ]
@@ -1953,21 +1963,21 @@ lazy_static! {
         Syscall {
             number: 225,
             name: "timer_getoverrun",
-            args: vec![
+            args: stringvec![
                 "timer_t timer_id"
             ]
         },
         Syscall {
             number: 226,
             name: "timer_delete",
-            args: vec![
+            args: stringvec![
                 "timer_t timer_id"
             ]
         },
         Syscall {
             number: 227,
             name: "clock_settime",
-            args: vec![
+            args: stringvec![
                 "clockid_t which_clock",
                 "const struct __kernel_timespec *tp"
             ]
@@ -1975,7 +1985,7 @@ lazy_static! {
         Syscall {
             number: 228,
             name: "clock_gettime",
-            args: vec![
+            args: stringvec![
                 "clockid_t which_clock",
                 "struct __kernel_timespec *tp"
             ]
@@ -1983,7 +1993,7 @@ lazy_static! {
         Syscall {
             number: 229,
             name: "clock_getres",
-            args: vec![
+            args: stringvec![
                 "clockid_t which_clock",
                 "struct __kernel_timespec *tp"
             ]
@@ -1991,7 +2001,7 @@ lazy_static! {
         Syscall {
             number: 230,
             name: "clock_nanosleep",
-            args: vec![
+            args: stringvec![
                 "clockid_t which_clock",
                 "int flags",
                 "const struct __kernel_timespec *rqtp",
@@ -2001,14 +2011,14 @@ lazy_static! {
         Syscall {
             number: 231,
             name: "exit_group",
-            args: vec![
+            args: stringvec![
                 "int error_code"
             ]
         },
         Syscall {
             number: 232,
             name: "epoll_wait",
-            args: vec![
+            args: stringvec![
                 "int epfd",
                 "struct epoll_event *events",
                 "int maxevents",
@@ -2018,7 +2028,7 @@ lazy_static! {
         Syscall {
             number: 233,
             name: "epoll_ctl",
-            args: vec![
+            args: stringvec![
                 "int epfd",
                 "int op",
                 "int fd",
@@ -2028,7 +2038,7 @@ lazy_static! {
         Syscall {
             number: 234,
             name: "tgkill",
-            args: vec![
+            args: stringvec![
                 "pid_t tgid",
                 "pid_t pid",
                 "int sig"
@@ -2037,7 +2047,7 @@ lazy_static! {
         Syscall {
             number: 235,
             name: "utimes",
-            args: vec![
+            args: stringvec![
                 "char *filename",
                 "struct timeval *utimes"
             ]
@@ -2045,7 +2055,7 @@ lazy_static! {
         Syscall {
             number: 236,
             name: "vserver",
-            args: vec![
+            args: stringvec![
                 "?",
                 "?",
                 "?",
@@ -2057,7 +2067,7 @@ lazy_static! {
         Syscall {
             number: 237,
             name: "mbind",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "unsigned long len",
                 "unsigned long mode",
@@ -2069,7 +2079,7 @@ lazy_static! {
         Syscall {
             number: 238,
             name: "set_mempolicy",
-            args: vec![
+            args: stringvec![
                 "int mode",
                 "const unsigned long *nmask",
                 "unsigned long maxnode"
@@ -2078,7 +2088,7 @@ lazy_static! {
         Syscall {
             number: 239,
             name: "get_mempolicy",
-            args: vec![
+            args: stringvec![
                 "int *policy",
                 "unsigned long *nmask",
                 "unsigned long maxnode",
@@ -2089,7 +2099,7 @@ lazy_static! {
         Syscall {
             number: 240,
             name: "mq_open",
-            args: vec![
+            args: stringvec![
                 "const char *name",
                 "int oflag",
                 "umode_t mode",
@@ -2099,14 +2109,14 @@ lazy_static! {
         Syscall {
             number: 241,
             name: "mq_unlink",
-            args: vec![
+            args: stringvec![
                 "const char *name"
             ]
         },
         Syscall {
             number: 242,
             name: "mq_timedsend",
-            args: vec![
+            args: stringvec![
                 "mqd_t mqdes",
                 "const char *msg_ptr",
                 "size_t msg_len",
@@ -2117,7 +2127,7 @@ lazy_static! {
         Syscall {
             number: 243,
             name: "mq_timedreceive",
-            args: vec![
+            args: stringvec![
                 "mqd_t mqdes",
                 "char *msg_ptr",
                 "size_t msg_len",
@@ -2128,7 +2138,7 @@ lazy_static! {
         Syscall {
             number: 244,
             name: "mq_notify",
-            args: vec![
+            args: stringvec![
                 "mqd_t mqdes",
                 "const struct sigevent *notification"
             ]
@@ -2136,7 +2146,7 @@ lazy_static! {
         Syscall {
             number: 245,
             name: "mq_getsetattr",
-            args: vec![
+            args: stringvec![
                 "mqd_t mqdes",
                 "const struct mq_attr *mqstat",
                 "struct mq_attr *omqstat"
@@ -2145,7 +2155,7 @@ lazy_static! {
         Syscall {
             number: 246,
             name: "kexec_load",
-            args: vec![
+            args: stringvec![
                 "unsigned long entry",
                 "unsigned long nr_segments",
                 "struct kexec_segment *segments",
@@ -2155,7 +2165,7 @@ lazy_static! {
         Syscall {
             number: 247,
             name: "waitid",
-            args: vec![
+            args: stringvec![
                 "int which",
                 "pid_t pid",
                 "struct siginfo *infop",
@@ -2166,7 +2176,7 @@ lazy_static! {
         Syscall {
             number: 248,
             name: "add_key",
-            args: vec![
+            args: stringvec![
                 "const char *_type",
                 "const char *_description",
                 "const void *_payload",
@@ -2177,7 +2187,7 @@ lazy_static! {
         Syscall {
             number: 249,
             name: "request_key",
-            args: vec![
+            args: stringvec![
                 "const char *_type",
                 "const char *_description",
                 "const char *_callout_info",
@@ -2187,7 +2197,7 @@ lazy_static! {
         Syscall {
             number: 250,
             name: "keyctl",
-            args: vec![
+            args: stringvec![
                 "int cmd",
                 "unsigned long arg2",
                 "unsigned long arg3",
@@ -2198,7 +2208,7 @@ lazy_static! {
         Syscall {
             number: 251,
             name: "ioprio_set",
-            args: vec![
+            args: stringvec![
                 "int which",
                 "int who",
                 "int ioprio"
@@ -2207,7 +2217,7 @@ lazy_static! {
         Syscall {
             number: 252,
             name: "ioprio_get",
-            args: vec![
+            args: stringvec![
                 "int which",
                 "int who"
             ]
@@ -2215,12 +2225,12 @@ lazy_static! {
         Syscall {
             number: 253,
             name: "inotify_init",
-            args: vec![]
+            args: stringvec![]
         },
         Syscall {
             number: 254,
             name: "inotify_add_watch",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "const char *path",
                 "u32 mask"
@@ -2229,7 +2239,7 @@ lazy_static! {
         Syscall {
             number: 255,
             name: "inotify_rm_watch",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "__s32 wd"
             ]
@@ -2237,7 +2247,7 @@ lazy_static! {
         Syscall {
             number: 256,
             name: "migrate_pages",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "unsigned long maxnode",
                 "const unsigned long *from",
@@ -2247,7 +2257,7 @@ lazy_static! {
         Syscall {
             number: 257,
             name: "openat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *filename",
                 "int flags",
@@ -2257,7 +2267,7 @@ lazy_static! {
         Syscall {
             number: 258,
             name: "mkdirat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char * pathname",
                 "umode_t mode"
@@ -2266,7 +2276,7 @@ lazy_static! {
         Syscall {
             number: 259,
             name: "mknodat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char * filename",
                 "umode_t mode",
@@ -2276,7 +2286,7 @@ lazy_static! {
         Syscall {
             number: 260,
             name: "fchownat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *filename",
                 "uid_t user",
@@ -2287,7 +2297,7 @@ lazy_static! {
         Syscall {
             number: 261,
             name: "futimesat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *filename",
                 "struct timeval *utimes"
@@ -2296,7 +2306,7 @@ lazy_static! {
         Syscall {
             number: 262,
             name: "newfstatat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *filename",
                 "struct stat *statbuf",
@@ -2306,7 +2316,7 @@ lazy_static! {
         Syscall {
             number: 263,
             name: "unlinkat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char * pathname",
                 "int flag"
@@ -2315,7 +2325,7 @@ lazy_static! {
         Syscall {
             number: 264,
             name: "renameat",
-            args: vec![
+            args: stringvec![
                 "int olddfd",
                 "const char * oldname",
                 "int newdfd",
@@ -2325,7 +2335,7 @@ lazy_static! {
         Syscall {
             number: 265,
             name: "linkat",
-            args: vec![
+            args: stringvec![
                 "int olddfd",
                 "const char *oldname",
                 "int newdfd",
@@ -2336,7 +2346,7 @@ lazy_static! {
         Syscall {
             number: 266,
             name: "symlinkat",
-            args: vec![
+            args: stringvec![
                 "const char * oldname",
                 "int newdfd",
                 "const char * newname"
@@ -2345,7 +2355,7 @@ lazy_static! {
         Syscall {
             number: 267,
             name: "readlinkat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *path",
                 "char *buf",
@@ -2355,7 +2365,7 @@ lazy_static! {
         Syscall {
             number: 268,
             name: "fchmodat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char * filename",
                 "umode_t mode"
@@ -2364,7 +2374,7 @@ lazy_static! {
         Syscall {
             number: 269,
             name: "faccessat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *filename",
                 "int mode"
@@ -2373,7 +2383,7 @@ lazy_static! {
         Syscall {
             number: 270,
             name: "pselect6",
-            args: vec![
+            args: stringvec![
                 "int",
                 "fd_set *",
                 "fd_set *",
@@ -2385,7 +2395,7 @@ lazy_static! {
         Syscall {
             number: 271,
             name: "ppoll",
-            args: vec![
+            args: stringvec![
                 "struct pollfd *",
                 "unsigned int",
                 "struct __kernel_timespec *",
@@ -2396,14 +2406,14 @@ lazy_static! {
         Syscall {
             number: 272,
             name: "unshare",
-            args: vec![
+            args: stringvec![
                 "unsigned long unshare_flags"
             ]
         },
         Syscall {
             number: 273,
             name: "set_robust_list",
-            args: vec![
+            args: stringvec![
                 "struct robust_list_head *head",
                 "size_t len"
             ]
@@ -2411,7 +2421,7 @@ lazy_static! {
         Syscall {
             number: 274,
             name: "get_robust_list",
-            args: vec![
+            args: stringvec![
                 "int pid",
                 "struct robust_list_head * *head_ptr",
                 "size_t *len_ptr"
@@ -2420,7 +2430,7 @@ lazy_static! {
         Syscall {
             number: 275,
             name: "splice",
-            args: vec![
+            args: stringvec![
                 "int fd_in",
                 "loff_t *off_in",
                 "int fd_out",
@@ -2432,7 +2442,7 @@ lazy_static! {
         Syscall {
             number: 276,
             name: "tee",
-            args: vec![
+            args: stringvec![
                 "int fdin",
                 "int fdout",
                 "size_t len",
@@ -2442,7 +2452,7 @@ lazy_static! {
         Syscall {
             number: 277,
             name: "sync_file_range",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "loff_t offset",
                 "loff_t nbytes",
@@ -2452,7 +2462,7 @@ lazy_static! {
         Syscall {
             number: 278,
             name: "vmsplice",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "const struct iovec *iov",
                 "unsigned long nr_segs",
@@ -2462,7 +2472,7 @@ lazy_static! {
         Syscall {
             number: 279,
             name: "move_pages",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "unsigned long nr_pages",
                 "const void * *pages",
@@ -2474,7 +2484,7 @@ lazy_static! {
         Syscall {
             number: 280,
             name: "utimensat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *filename",
                 "struct __kernel_timespec *utimes",
@@ -2484,7 +2494,7 @@ lazy_static! {
         Syscall {
             number: 281,
             name: "epoll_pwait",
-            args: vec![
+            args: stringvec![
                 "int epfd",
                 "struct epoll_event *events",
                 "int maxevents",
@@ -2496,7 +2506,7 @@ lazy_static! {
         Syscall {
             number: 282,
             name: "signalfd",
-            args: vec![
+            args: stringvec![
                 "int ufd",
                 "sigset_t *user_mask",
                 "size_t sizemask"
@@ -2505,7 +2515,7 @@ lazy_static! {
         Syscall {
             number: 283,
             name: "timerfd_create",
-            args: vec![
+            args: stringvec![
                 "int clockid",
                 "int flags"
             ]
@@ -2513,14 +2523,14 @@ lazy_static! {
         Syscall {
             number: 284,
             name: "eventfd",
-            args: vec![
+            args: stringvec![
                 "unsigned int count"
             ]
         },
         Syscall {
             number: 285,
             name: "fallocate",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "int mode",
                 "loff_t offset",
@@ -2530,7 +2540,7 @@ lazy_static! {
         Syscall {
             number: 286,
             name: "timerfd_settime",
-            args: vec![
+            args: stringvec![
                 "int ufd",
                 "int flags",
                 "const struct __kernel_itimerspec *utmr",
@@ -2540,7 +2550,7 @@ lazy_static! {
         Syscall {
             number: 287,
             name: "timerfd_gettime",
-            args: vec![
+            args: stringvec![
                 "int ufd",
                 "struct __kernel_itimerspec *otmr"
             ]
@@ -2548,7 +2558,7 @@ lazy_static! {
         Syscall {
             number: 288,
             name: "accept4",
-            args: vec![
+            args: stringvec![
                 "int",
                 "struct sockaddr *",
                 "int *",
@@ -2558,7 +2568,7 @@ lazy_static! {
         Syscall {
             number: 289,
             name: "signalfd4",
-            args: vec![
+            args: stringvec![
                 "int ufd",
                 "sigset_t *user_mask",
                 "size_t sizemask",
@@ -2568,7 +2578,7 @@ lazy_static! {
         Syscall {
             number: 290,
             name: "eventfd2",
-            args: vec![
+            args: stringvec![
                 "unsigned int count",
                 "int flags"
             ]
@@ -2576,14 +2586,14 @@ lazy_static! {
         Syscall {
             number: 291,
             name: "epoll_create1",
-            args: vec![
+            args: stringvec![
                 "int flags"
             ]
         },
         Syscall {
             number: 292,
             name: "dup3",
-            args: vec![
+            args: stringvec![
                 "unsigned int oldfd",
                 "unsigned int newfd",
                 "int flags"
@@ -2592,7 +2602,7 @@ lazy_static! {
         Syscall {
             number: 293,
             name: "pipe2",
-            args: vec![
+            args: stringvec![
                 "int *fildes",
                 "int flags"
             ]
@@ -2600,14 +2610,14 @@ lazy_static! {
         Syscall {
             number: 294,
             name: "inotify_init1",
-            args: vec![
+            args: stringvec![
                 "int flags"
             ]
         },
         Syscall {
             number: 295,
             name: "preadv",
-            args: vec![
+            args: stringvec![
                 "unsigned long fd",
                 "const struct iovec *vec",
                 "unsigned long vlen",
@@ -2618,7 +2628,7 @@ lazy_static! {
         Syscall {
             number: 296,
             name: "pwritev",
-            args: vec![
+            args: stringvec![
                 "unsigned long fd",
                 "const struct iovec *vec",
                 "unsigned long vlen",
@@ -2629,7 +2639,7 @@ lazy_static! {
         Syscall {
             number: 297,
             name: "rt_tgsigqueueinfo",
-            args: vec![
+            args: stringvec![
                 "pid_t tgid",
                 "pid_t pid",
                 "int sig",
@@ -2639,7 +2649,7 @@ lazy_static! {
         Syscall {
             number: 298,
             name: "perf_event_open",
-            args: vec![
+            args: stringvec![
                 "struct perf_event_attr *attr_uptr",
                 "pid_t pid",
                 "int cpu",
@@ -2650,7 +2660,7 @@ lazy_static! {
         Syscall {
             number: 299,
             name: "recvmmsg",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "struct mmsghdr *msg",
                 "unsigned int vlen",
@@ -2661,7 +2671,7 @@ lazy_static! {
         Syscall {
             number: 300,
             name: "fanotify_init",
-            args: vec![
+            args: stringvec![
                 "unsigned int flags",
                 "unsigned int event_f_flags"
             ]
@@ -2669,7 +2679,7 @@ lazy_static! {
         Syscall {
             number: 301,
             name: "fanotify_mark",
-            args: vec![
+            args: stringvec![
                 "int fanotify_fd",
                 "unsigned int flags",
                 "u64 mask",
@@ -2680,7 +2690,7 @@ lazy_static! {
         Syscall {
             number: 302,
             name: "prlimit64",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "unsigned int resource",
                 "const struct rlimit64 *new_rlim",
@@ -2690,7 +2700,7 @@ lazy_static! {
         Syscall {
             number: 303,
             name: "name_to_handle_at",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *name",
                 "struct file_handle *handle",
@@ -2701,7 +2711,7 @@ lazy_static! {
         Syscall {
             number: 304,
             name: "open_by_handle_at",
-            args: vec![
+            args: stringvec![
                 "int mountdirfd",
                 "struct file_handle *handle",
                 "int flags"
@@ -2710,7 +2720,7 @@ lazy_static! {
         Syscall {
             number: 305,
             name: "clock_adjtime",
-            args: vec![
+            args: stringvec![
                 "clockid_t which_clock",
                 "struct __kernel_timex *tx"
             ]
@@ -2718,14 +2728,14 @@ lazy_static! {
         Syscall {
             number: 306,
             name: "syncfs",
-            args: vec![
+            args: stringvec![
                 "int fd"
             ]
         },
         Syscall {
             number: 307,
             name: "sendmmsg",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "struct mmsghdr *msg",
                 "unsigned int vlen",
@@ -2735,7 +2745,7 @@ lazy_static! {
         Syscall {
             number: 308,
             name: "setns",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "int nstype"
             ]
@@ -2743,7 +2753,7 @@ lazy_static! {
         Syscall {
             number: 309,
             name: "getcpu",
-            args: vec![
+            args: stringvec![
                 "unsigned *cpu",
                 "unsigned *node",
                 "struct getcpu_cache *cache"
@@ -2752,7 +2762,7 @@ lazy_static! {
         Syscall {
             number: 310,
             name: "process_vm_readv",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "const struct iovec *lvec",
                 "unsigned long liovcnt",
@@ -2764,7 +2774,7 @@ lazy_static! {
         Syscall {
             number: 311,
             name: "process_vm_writev",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "const struct iovec *lvec",
                 "unsigned long liovcnt",
@@ -2776,7 +2786,7 @@ lazy_static! {
         Syscall {
             number: 312,
             name: "kcmp",
-            args: vec![
+            args: stringvec![
                 "pid_t pid1",
                 "pid_t pid2",
                 "int type",
@@ -2787,7 +2797,7 @@ lazy_static! {
         Syscall {
             number: 313,
             name: "finit_module",
-            args: vec![
+            args: stringvec![
                 "int fd",
                 "const char *uargs",
                 "int flags"
@@ -2796,7 +2806,7 @@ lazy_static! {
         Syscall {
             number: 314,
             name: "sched_setattr",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "struct sched_attr *attr",
                 "unsigned int flags"
@@ -2805,7 +2815,7 @@ lazy_static! {
         Syscall {
             number: 315,
             name: "sched_getattr",
-            args: vec![
+            args: stringvec![
                 "pid_t pid",
                 "struct sched_attr *attr",
                 "unsigned int size",
@@ -2815,7 +2825,7 @@ lazy_static! {
         Syscall {
             number: 316,
             name: "renameat2",
-            args: vec![
+            args: stringvec![
                 "int olddfd",
                 "const char *oldname",
                 "int newdfd",
@@ -2826,7 +2836,7 @@ lazy_static! {
         Syscall {
             number: 317,
             name: "seccomp",
-            args: vec![
+            args: stringvec![
                 "unsigned int op",
                 "unsigned int flags",
                 "void *uargs"
@@ -2835,7 +2845,7 @@ lazy_static! {
         Syscall {
             number: 318,
             name: "getrandom",
-            args: vec![
+            args: stringvec![
                 "char *buf",
                 "size_t count",
                 "unsigned int flags"
@@ -2844,7 +2854,7 @@ lazy_static! {
         Syscall {
             number: 319,
             name: "memfd_create",
-            args: vec![
+            args: stringvec![
                 "const char *uname_ptr",
                 "unsigned int flags"
             ]
@@ -2852,7 +2862,7 @@ lazy_static! {
         Syscall {
             number: 320,
             name: "kexec_file_load",
-            args: vec![
+            args: stringvec![
                 "int kernel_fd",
                 "int initrd_fd",
                 "unsigned long cmdline_len",
@@ -2863,7 +2873,7 @@ lazy_static! {
         Syscall {
             number: 321,
             name: "bpf",
-            args: vec![
+            args: stringvec![
                 "int cmd",
                 "union bpf_attr *attr",
                 "unsigned int size"
@@ -2872,7 +2882,7 @@ lazy_static! {
         Syscall {
             number: 322,
             name: "execveat",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *filename",
                 "const char *const *argv",
@@ -2883,14 +2893,14 @@ lazy_static! {
         Syscall {
             number: 323,
             name: "userfaultfd",
-            args: vec![
+            args: stringvec![
                 "int flags"
             ]
         },
         Syscall {
             number: 324,
             name: "membarrier",
-            args: vec![
+            args: stringvec![
                 "int cmd",
                 "int flags"
             ]
@@ -2898,7 +2908,7 @@ lazy_static! {
         Syscall {
             number: 325,
             name: "mlock2",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "size_t len",
                 "int flags"
@@ -2907,7 +2917,7 @@ lazy_static! {
         Syscall {
             number: 326,
             name: "copy_file_range",
-            args: vec![
+            args: stringvec![
                 "int fd_in",
                 "loff_t *off_in",
                 "int fd_out",
@@ -2919,7 +2929,7 @@ lazy_static! {
         Syscall {
             number: 327,
             name: "preadv2",
-            args: vec![
+            args: stringvec![
                 "unsigned long fd",
                 "const struct iovec *vec",
                 "unsigned long vlen",
@@ -2931,7 +2941,7 @@ lazy_static! {
         Syscall {
             number: 328,
             name: "pwritev2",
-            args: vec![
+            args: stringvec![
                 "unsigned long fd",
                 "const struct iovec *vec",
                 "unsigned long vlen",
@@ -2943,7 +2953,7 @@ lazy_static! {
         Syscall {
             number: 329,
             name: "pkey_mprotect",
-            args: vec![
+            args: stringvec![
                 "unsigned long start",
                 "size_t len",
                 "unsigned long prot",
@@ -2953,7 +2963,7 @@ lazy_static! {
         Syscall {
             number: 330,
             name: "pkey_alloc",
-            args: vec![
+            args: stringvec![
                 "unsigned long flags",
                 "unsigned long init_val"
             ]
@@ -2961,20 +2971,20 @@ lazy_static! {
         Syscall {
             number: 331,
             name: "pkey_free",
-            args: vec![
+            args: stringvec![
                 "int pkey"
             ]
         },
         Syscall {
             number: 332,
             name: "statx",
-            args: vec![
+            args: stringvec![
                 "int dfd",
                 "const char *path",
                 "unsigned flags",
                 "unsigned mask",
                 "struct statx *buffer"
             ]
-        }
+        },
     ];
 }
