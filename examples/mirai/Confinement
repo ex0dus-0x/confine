@@ -4,6 +4,7 @@ sample:
     url: https://github.com/ytisf/theZoo/raw/master/malwares/Binaries/Linux.Mirai.B/Linux.Mirai.B.zip
 
 execution:
-    - name: Unzip
+    steps:
+        -name: Unzip
       trace: false
       command: ["unzip", "-P", "infected", "Linux.Mirai.B.zip"]

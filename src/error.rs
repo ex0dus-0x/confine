@@ -3,7 +3,7 @@
 use nix::Error as NixError;
 use serde_json::Error as JSONError;
 use serde_yaml::Error as YAMLError;
-//use unshare::Error as UnshareError;
+use ureq::Error as ReqError;
 
 use std::error::Error;
 use std::fmt::{self, Display};
@@ -18,9 +18,6 @@ pub enum ConfineError {
     // wraps over file I/O issues
     IOError(IOError),
 
-    // problems encountered when attempting spawn a process
-    //SpawnError(UnshareError),
-
     // problems encountered when attempting to call system facilities
     SystemError(NixError),
 
@@ -29,16 +26,19 @@ pub enum ConfineError {
 
     // returned if de/serialization fails, specifies filetype
     ParseError(String),
+
+    // ureq http req errors
+    HttpError(ReqError),
 }
 
 impl Display for ConfineError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ConfineError::IOError(..) => write!(f, "Failed to properly interact with file"),
-            //ConfineError::SpawnError(err) => write!(f, "{}", err),
-            ConfineError::SystemError(err) => write!(f, "Linux system error: {}", err),
-            ConfineError::SyscallError(msg) => write!(f, "Error with handling syscalls: {}", msg),
-            ConfineError::ParseError(err) => write!(f, "Unable to properly parse: {}", err),
+            ConfineError::IOError(err) => write!(f, "I/O: {}", err),
+            ConfineError::SystemError(err) => write!(f, "System: {}", err),
+            ConfineError::SyscallError(msg) => write!(f, "Syscalls: {}", msg),
+            ConfineError::ParseError(err) => write!(f, "Parsing: {}", err),
+            ConfineError::HttpError(err) => write!(f, "Http: {}", err),
         }
     }
 }
@@ -50,14 +50,6 @@ impl From<IOError> for ConfineError {
         ConfineError::IOError(err)
     }
 }
-
-/*
-impl From<UnshareError> for ConfineError {
-    fn from(err: UnshareError) -> ConfineError {
-        ConfineError::SpawnError(err)
-    }
-}
-*/
 
 impl From<NixError> for ConfineError {
     fn from(err: NixError) -> ConfineError {
@@ -74,5 +66,11 @@ impl From<JSONError> for ConfineError {
 impl From<YAMLError> for ConfineError {
     fn from(err: YAMLError) -> ConfineError {
         ConfineError::ParseError(err.to_string())
+    }
+}
+
+impl From<ReqError> for ConfineError {
+    fn from(err: ReqError) -> ConfineError {
+        ConfineError::HttpError(err)
     }
 }

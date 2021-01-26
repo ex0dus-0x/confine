@@ -109,21 +109,26 @@ impl ThreatReport {
                 let buffer: &str = syscall.args.get(&buf_key).unwrap().as_str().unwrap();
 
                 // add string to vector
-                self.strings.push(buffer.to_string());
+                if !buffer.is_empty() {
+                    self.strings.push(buffer.to_string());
+                }
 
                 // check if a known for persistence
                 self.capabilities.check_persistence(buffer.to_string());
             }
 
             // if an open* syscall is encountered, get filename and mode
-            "open" | "openat" => {
+            "open" | "openat" | "stat" | "fstat" | "lstat" => {
                 // get filename
                 let pathname_key: String = "const char *filename".to_string();
                 let file: &str = syscall.args.get(&pathname_key).unwrap().as_str().unwrap();
 
                 // get I/O flag
                 let flag_key: String = "int flags".to_string();
-                let flag: u64 = syscall.args.get(&flag_key).unwrap().as_u64().unwrap();
+                let flag: u64 = match syscall.args.get(&flag_key) {
+                    Some(val) => val.as_u64().unwrap(),
+                    None => 0,
+                };
 
                 // TODO: parse flag
 

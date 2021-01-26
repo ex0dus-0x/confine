@@ -1,24 +1,12 @@
-//! Defines common confine policy format for enforcement. Consumes a configuration which is then
-//! used by confine when tracing to handle call behavior, acting as a dynamic firewall.
+use serde::Deserialize;
+
 use std::fs;
 use std::path::PathBuf;
-
-use serde::Deserialize;
 
 use crate::error::ConfineResult;
 use crate::syscall::ParsedSyscall;
 
-/*
-/// Implements the variants a user input for a syscall rule can be.
-#[derive(Deserialize, Debug, Clone)]
-pub enum SyscallType {
-    Syscall(Syscall),
-    Group(SyscallGroup),
-
-*/
-
-/// Declares an action parsed by the userspace application and applied to
-/// system calls before trace.
+/// Declares an action parsed and applied to system calls before running.
 #[derive(Debug, Clone)]
 pub enum Action {
     Permit, // enable execution of system call
@@ -51,21 +39,17 @@ pub struct Rule {
     pub action: Action,
 }
 
-// Represents a parsed policy configuration used for enforcing against the trace.
+/// Represents a parsed policy configuration used for enforcing against the trace.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Policy {
+    // if set, defines a path where syscalls are logged to
     pub logpath: Option<PathBuf>,
+
+    // all rules that are to be enforced during dynamic tracing
     pub rules: Vec<Rule>,
 }
 
 impl Policy {
-    /// Instantiates a strongly typed `Policy` from a given
-    pub fn new(path: PathBuf) -> ConfineResult<Self> {
-        let contents: String = fs::read_to_string(path)?;
-        let yaml = serde_yaml::from_str(&contents)?;
-        Ok(yaml)
-    }
-
     /// Checks if a given syscall name is set as a rule, and return action to enforce if found.
     pub fn get_enforcement(&self, syscall: &str) -> Option<Action> {
         self.rules
