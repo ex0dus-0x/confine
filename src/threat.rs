@@ -118,14 +118,17 @@ impl ThreatReport {
             }
 
             // if an open* syscall is encountered, get filename and mode
-            "open" | "openat" => {
+            "open" | "openat" | "stat" | "fstat" | "lstat" => {
                 // get filename
                 let pathname_key: String = "const char *filename".to_string();
                 let file: &str = syscall.args.get(&pathname_key).unwrap().as_str().unwrap();
 
                 // get I/O flag
                 let flag_key: String = "int flags".to_string();
-                let flag: u64 = syscall.args.get(&flag_key).unwrap().as_u64().unwrap();
+                let flag: u64 = match syscall.args.get(&flag_key) {
+                    Some(val) => val.as_u64().unwrap(),
+                    None => 0,
+                };
 
                 // TODO: parse flag
 
