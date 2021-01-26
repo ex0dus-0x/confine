@@ -8,8 +8,8 @@ use std::fmt::{self, Display};
 
 mod defs;
 
-use crate::syscall::defs::SYSCALL_TABLE;
 use crate::error::{ConfineError, ConfineResult};
+use crate::syscall::defs::SYSCALL_TABLE;
 
 /// Maps argument names against the genericized value that is parsed
 pub type ArgMap = HashMap<String, Value>;

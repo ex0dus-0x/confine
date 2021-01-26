@@ -95,7 +95,11 @@ impl Tracer {
                     exec.arg(arg);
                 }
                 let status = exec.spawn()?.wait()?;
-                log::info!("Finished executing step {} with exit code {}", idx + 1, status);
+                log::info!(
+                    "Finished executing step {} with exit code {}",
+                    idx + 1,
+                    status
+                );
             }
         }
 

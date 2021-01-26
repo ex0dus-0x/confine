@@ -204,7 +204,8 @@ impl Subprocess {
                     // write parsed syscall to log file
                     Action::Log => {
                         log::trace!("Writing encountered syscall `{}` to log", name);
-                        let parsed_syscall: ParsedSyscall = ParsedSyscall::new(name.to_string(), args.clone());
+                        let parsed_syscall: ParsedSyscall =
+                            ParsedSyscall::new(name.to_string(), args.clone());
                         policy.to_log(parsed_syscall)?;
                     }
 

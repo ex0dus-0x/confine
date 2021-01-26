@@ -117,8 +117,10 @@ impl ThreatReport {
                 self.capabilities.check_persistence(buffer.to_string());
             }
 
-            // if an open* syscall is encountered, get filename and mode
-            "open" | "openat" | "stat" | "fstat" | "lstat" => {
+            // if an file IO syscall is encountered, get filename and mode
+            "open" | "openat" | "stat" | "fstat" | "lstat" | "chdir" | "chmod" | "chown"
+            | "lchown" | "fchownat" | "newfstatat" | "fchmodat" | "faccessat" | "mkdnod"
+            | "mknodat" => {
                 // get filename
                 let pathname_key: String = "const char *filename".to_string();
                 let file: &str = syscall.args.get(&pathname_key).unwrap().as_str().unwrap();
@@ -137,7 +139,7 @@ impl ThreatReport {
             }
 
             // if a child command is launched, record executable and arguments
-            "execve" => {
+            "execve" | "execveat" | "execlp" | "execvp" => {
                 // get executable name
                 let pathname_key: String = "const char *filename".to_string();
                 let cmd: &str = syscall.args.get(&pathname_key).unwrap().as_str().unwrap();
