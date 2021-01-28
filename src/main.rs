@@ -49,11 +49,24 @@ fn parse_args<'a>() -> ArgMatches<'a> {
                 .value_name("HOSTNAME")
                 .required(false),
         )
+        .arg(
+            Arg::with_name("trace")
+                .help("Output full trace during execution.")
+                .short("t")
+                .long("trace")
+                .takes_value(false)
+                .required(false),
+        )
         .get_matches()
 }
 
 fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
+
+    // set global log level to be `info` if `--trace` is set
+    if matches.is_present("trace") {
+        log::set_max_level(log::LevelFilter::Info);
+    }
 
     // get path to configuration to provision and execute
     log::trace!("Checking path to `Confinement` configuration");

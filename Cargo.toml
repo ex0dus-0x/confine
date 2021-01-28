@@ -28,7 +28,7 @@ pretty_env_logger = "0.4"
 flate2 = "1.0.19"
 tar = "0.4.30"
 
-ureq = "2.0.1"
+ureq = { version = "2.0", features = ["charset"] }
 
 libc = "0.2"
 nix = "0.19.1"

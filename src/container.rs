@@ -1,6 +1,7 @@
-//! Implements container runtime that is initialized before the execution of the tracee.
+//! Implements container runtime that is initialized before the execution of the debuge.
 use nix::{mount, sched, unistd};
 
+use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::{env, fs};
@@ -38,15 +39,24 @@ impl Container {
         }
         cgroups.push("confine");
 
+        log::trace!("Cgroups path: {:?}", cgroups);
+
         // check if optional hostname specified, otherwise generate random
         let hostname: String = match _hostname {
             Some(hn) => hn.to_string(),
             None => Container::gen_hostname(),
         };
 
+        log::trace!("Hostname: {}", hostname);
+
         // if mountpath isn't specified, create temp one with new rootfs immediately
         let mountpath: PathBuf = match rootfs {
-            Some(path) => PathBuf::from(path),
+            Some(path) => {
+                let mut abspath = PathBuf::new();
+                abspath.push(env::current_dir()?);
+                abspath.push(path);
+                abspath
+            }
             None => {
                 let mut path = env::temp_dir();
                 path.push(format!("tmp_{}", hostname));
@@ -56,6 +66,8 @@ impl Container {
                 path
             }
         };
+
+        log::trace!("Mountpath: {:?}", mountpath);
 
         Ok(Self {
             hostname,
@@ -77,22 +89,23 @@ impl Container {
     /// restricted cloned process.
     #[inline]
     fn init_new_rootfs(rootfs: &PathBuf) -> ConfineResult<()> {
-        log::trace!("Creating tempdir for mountpoint");
+        log::debug!("Creating tempdir for mountpoint");
         fs::create_dir(rootfs)?;
         env::set_current_dir(rootfs)?;
 
-        log::trace!("Downloading alpine rootfs from upstream");
-        let rootfs_contents: String = ureq::get(UPSTREAM_ROOTFS_URL).call()?.into_string()?;
+        log::info!("Downloading alpine rootfs from upstream...");
+        let resp = ureq::get(UPSTREAM_ROOTFS_URL).call()?;
 
-        /*
-        use std::io::Write;
-        log::trace!("Writing");
-        let mut f = fs::File::create("rootfs.tar.gz")?;
-        f.write_all(&rootfs_contents.as_bytes())?;
-        */
+        let len = resp.header("Content-Length")
+            .and_then(|s| s.parse::<usize>().ok()).unwrap();
+        log::trace!("Reading {} bytes of content from response", len);
 
-        log::trace!("Unarchiving the tarball for the rootfs");
-        let tar = GzDecoder::new(rootfs_contents.as_bytes());
+        let mut rootfs_contents: Vec<u8> = Vec::with_capacity(len);
+        resp.into_reader()
+            .read_to_end(&mut rootfs_contents)?;
+
+        log::debug!("Unarchiving the tarball for the rootfs");
+        let tar = GzDecoder::new(&rootfs_contents[..]);
         let mut archive = Archive::new(tar);
         archive.unpack(".")?;
         Ok(())
@@ -119,7 +132,7 @@ impl Container {
             fs::set_permissions(&self.cgroups, permission).ok();
         }
 
-        log::trace!("Writing to cgroups directory");
+        log::debug!("Writing to cgroups directory");
         fs::write(self.cgroups.join("pids.max"), b"20")?;
         fs::write(self.cgroups.join("notify_on_release"), b"1")?;
         fs::write(self.cgroups.join("cgroup.procs"), b"0")?;
@@ -130,11 +143,11 @@ impl Container {
         log::info!("Mounting rootfs to root path...");
         unistd::chroot(&self.mountpath)?;
 
-        log::trace!("Changing to `/` dir in rootfs");
+        log::debug!("Changing to `/` dir in rootfs");
         unistd::chdir("/")?;
 
         // mount the procfs in container to hide away host processes
-        log::info!("Mounting procfs");
+        log::info!("Mounting procfs...");
         mount::mount(
             Some("proc"),
             "/proc",
@@ -144,6 +157,7 @@ impl Container {
         )?;
 
         // mount tmpfs
+        log::info!("Mounting tmpfs...");
         mount::mount(
             Some("tmpfs"),
             "/dev",
@@ -158,8 +172,11 @@ impl Container {
 impl Drop for Container {
     fn drop(&mut self) {
         if self.cgroups.exists() {
-            log::trace!("Removing cgroups");
-            fs::remove_dir(&self.cgroups).expect("Cannot delete cgroups path");
+            log::debug!("Removing cgroups");
+            if let Err(err) = fs::remove_dir(&self.cgroups) {
+                log::error!("{}", err);
+                std::process::exit(-1);
+            }
         }
     }
 }

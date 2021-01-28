@@ -35,11 +35,16 @@ impl Confinement {
     /// developer included a `url` parameter in segment.
     pub fn pull_sample(&self) -> ConfineResult<Option<()>> {
         // return immediately if no url is specified
-        if !self.sample.contains_url() {
+        if let None = self.sample.url {
             return Ok(None);
+
+        // download to current path if set
+        } else if let Some(url) = &self.sample.url {
+            log::trace!("Downloading sample");
+            let dl_resp = ureq::get(&url).call()?;
+            println!("{:?}", dl_resp);
         }
 
-        // otherwise download file to container
         Ok(Some(()))
     }
 }
@@ -56,12 +61,6 @@ pub struct Sample {
 
     // optional URL to denote upstream path to sample, which can be furthered processed
     url: Option<String>,
-}
-
-impl Sample {
-    pub fn contains_url(&self) -> bool {
-        self.url.is_some()
-    }
 }
 
 /// Defines sequential step executed in the container to properly setup the environment for

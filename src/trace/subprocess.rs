@@ -77,19 +77,19 @@ impl Subprocess {
         // spawns a child process handler
         log::info!("Spawning target executable in containerized environment");
 
-        log::trace!("Launching child process");
+        log::debug!("Launching child process");
         let child = self.cmd.spawn()?;
 
-        // create nix Pid, save state for later use
+        // save Pid, save state for later use
         self.pid = Pid::from_raw(child.id() as i32);
+        log::trace!("PID: {:?}", self.pid);
 
         // configure options to trace for syscall interrupt
         // TODO: trace forked childrens
-        log::trace!("Running PTRACE_SETOPTIONS");
+        log::debug!("Running PTRACE_SETOPTIONS");
         ptrace::setoptions(self.pid, ptrace::Options::PTRACE_O_TRACESYSGOOD)?;
 
-        // wait for process to change execution state
-        log::trace!("Waiting for process");
+        log::debug!("Waiting for process to change execution state");
         wait::waitpid(self.pid, None)?;
 
         // run loop until broken by end of execution
@@ -135,7 +135,7 @@ impl Subprocess {
         for (idx, arg) in to_read.iter().enumerate() {
             // get contents of register in calling convention by index
             let regval: u64 = Self::get_reg_idx(regstate, idx as i32);
-            if regval == u64::MAX {
+            if regval > u64::MAX {
                 return Err(ConfineError::SystemError(NixError::invalid_argument()));
             }
 
@@ -148,11 +148,13 @@ impl Subprocess {
 
         // at this stage, before commiting and exiting, check if a rule has been set that needs to
         // be enforced
+        log::trace!("Checking against policy");
         if self.enforce_policy(syscall_num, &args)? == -1 {
             return Ok(0);
         }
 
         // add syscall to manager
+        log::trace!("Adding to syscall manager");
         let parsed: ParsedSyscall = self.manager.add_syscall(syscall_num, args)?;
 
         log::info!("{}", parsed);
@@ -185,14 +187,14 @@ impl Subprocess {
                 }
             };
 
-            log::trace!("Checking syscall `{}` against policy", name);
+            log::debug!("Checking syscall `{}` against policy", name);
 
             // check if name is set as policy, and get enforcement
             if let Some(action) = policy.get_enforcement(&name) {
                 match action {
                     // print warning with syscall but continue execution
                     Action::Warn => {
-                        log::warn!("confine: [WARN] encountered syscall {}", name);
+                        log::info!("confine: [WARN] encountered syscall {}", name);
                     }
 
                     // halt execution immediately and return
@@ -203,7 +205,7 @@ impl Subprocess {
 
                     // write parsed syscall to log file
                     Action::Log => {
-                        log::trace!("Writing encountered syscall `{}` to log", name);
+                        log::info!("Writing encountered syscall `{}` to log", name);
                         let parsed_syscall: ParsedSyscall =
                             ParsedSyscall::new(name.to_string(), args.clone());
                         policy.to_log(parsed_syscall)?;
@@ -260,6 +262,8 @@ impl Subprocess {
             "off_t",
             "loff_t",
         ];
+
+        log::trace!("Checking numerical types");
         if numerics.iter().any(|&i| typename.contains(i)) {
             return Ok(json!(regval));
         }
@@ -273,11 +277,13 @@ impl Subprocess {
         ];
 
         // since parsing data structures is a lot of work, just store hex address
+        log::trace!("Checking for structs");
         if structs.iter().any(|&i| typename.contains(i)) || typename.contains("struct") {
             return Ok(json!(format!("0x{:x}", regval)));
         }
 
         // if a char buffer, use ptrace to read from address stored in register
+        log::trace!("Checking for char buffers");
         if typename.contains("char") {
             // instantiate buffer to store contents from read
             let mut buffer: Vec<u8> = Vec::new();
