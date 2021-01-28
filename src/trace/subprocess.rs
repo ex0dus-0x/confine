@@ -135,9 +135,6 @@ impl Subprocess {
         for (idx, arg) in to_read.iter().enumerate() {
             // get contents of register in calling convention by index
             let regval: u64 = Self::get_reg_idx(regstate, idx as i32);
-            if regval > u64::MAX {
-                return Err(ConfineError::SystemError(NixError::invalid_argument()));
-            }
 
             // get type and decide if further reading is necessary
             let val: Value = self.parse_type(arg, regval)?;

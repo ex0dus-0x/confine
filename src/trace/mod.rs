@@ -1,6 +1,6 @@
 //! Defines the main debugr that is interfaced against for execution of a configuration.
 use nix::sys::signal::Signal;
-use nix::{sched, mount};
+use nix::sched;
 
 use std::process::Command;
 
@@ -106,8 +106,9 @@ impl Tracer {
             }
         }
 
-        log::debug!("Unmounting procfs in rootfs");
-        mount::umount("proc")?;
+        // cleanup container after execution
+        log::debug!("Cleaning up after container");
+        self.runtime.cleanup()?;
         Ok(0)
     }
 }

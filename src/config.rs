@@ -35,7 +35,7 @@ impl Confinement {
     /// developer included a `url` parameter in segment.
     pub fn pull_sample(&self) -> ConfineResult<Option<()>> {
         // return immediately if no url is specified
-        if let None = self.sample.url {
+        if self.sample.url.is_none() {
             return Ok(None);
 
         // download to current path if set

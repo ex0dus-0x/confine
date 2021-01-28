@@ -15,6 +15,7 @@ use crate::config::Confinement;
 use crate::trace::Tracer;
 
 fn main() {
+    env_logger::init();
     let cli_args: ArgMatches = parse_args();
     if let Err(err) = run(cli_args) {
         log::error!("{}", err);
@@ -61,7 +62,6 @@ fn parse_args<'a>() -> ArgMatches<'a> {
 }
 
 fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
-    pretty_env_logger::init();
 
     // set global log level to be `info` if `--trace` is set
     if matches.is_present("trace") {

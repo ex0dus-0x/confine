@@ -20,7 +20,7 @@ pub struct Container {
     // hostname used for new container mount, random or specified
     hostname: String,
 
-    // temp dir used to store rootfs mountpoint
+    // temp dir used to store rootfs mountpath
     mountpath: PathBuf,
 
     // path to cgroups for resource restrictions
@@ -60,7 +60,7 @@ impl Container {
             None => {
                 let mut path = env::temp_dir();
                 path.push(format!("tmp_{}", hostname));
-                if let Err(e) = Self::init_new_rootfs(&path) {
+                if let Err(e) = Container::init_new_rootfs(&path) {
                     return Err(e);
                 }
                 path
@@ -85,24 +85,25 @@ impl Container {
     }
 
     /// Create a new tempdir, and untar the rootfs into the tempdir. Should be called before
-    /// actually starting the container to initialize the mountpoint state before entering the
+    /// actually starting the container to initialize the mountpath state before entering the
     /// restricted cloned process.
     #[inline]
     fn init_new_rootfs(rootfs: &PathBuf) -> ConfineResult<()> {
-        log::debug!("Creating tempdir for mountpoint");
+        log::debug!("Creating tempdir for mountpath");
         fs::create_dir(rootfs)?;
         env::set_current_dir(rootfs)?;
 
         log::info!("Downloading alpine rootfs from upstream...");
         let resp = ureq::get(UPSTREAM_ROOTFS_URL).call()?;
 
-        let len = resp.header("Content-Length")
-            .and_then(|s| s.parse::<usize>().ok()).unwrap();
+        let len = resp
+            .header("Content-Length")
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap();
         log::trace!("Reading {} bytes of content from response", len);
 
         let mut rootfs_contents: Vec<u8> = Vec::with_capacity(len);
-        resp.into_reader()
-            .read_to_end(&mut rootfs_contents)?;
+        resp.into_reader().read_to_end(&mut rootfs_contents)?;
 
         log::debug!("Unarchiving the tarball for the rootfs");
         let tar = GzDecoder::new(&rootfs_contents[..]);
@@ -167,16 +168,28 @@ impl Container {
         )?;
         Ok(())
     }
-}
 
-impl Drop for Container {
-    fn drop(&mut self) {
+
+    /// Container resource cleanup routine, replaces `Drop` implementation.
+    pub fn cleanup(&self) -> ConfineResult<()> {
+        log::trace!("Unmounting procfs in rootfs");
+        mount::umount("/proc")?;
+
+        log::trace!("Unmounting procfs in rootfs");
+        mount::umount("/dev")?;
+
+        // get rid of cgroups limits
         if self.cgroups.exists() {
-            log::debug!("Removing cgroups");
-            if let Err(err) = fs::remove_dir(&self.cgroups) {
-                log::error!("{}", err);
-                std::process::exit(-1);
-            }
+            log::trace!("Removing cgroups");
+            fs::remove_dir(&self.cgroups)?;
         }
+        Ok(())
     }
 }
+
+/*
+impl Drop for Container {
+    fn drop(&mut self) {
+    }
+}
+*/
