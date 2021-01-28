@@ -68,7 +68,6 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
         log::set_max_level(log::LevelFilter::Info);
     }
 
-    // get path to configuration to provision and execute
     log::trace!("Checking path to `Confinement` configuration");
     let mut config_path: PathBuf = PathBuf::from(matches.value_of("PATH").unwrap());
     config_path.push("Confinement");
@@ -79,7 +78,6 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
         );
     }
 
-    // parse configuration from path
     log::trace!("Parsing `Confinement` configuration");
     let config: Confinement = Confinement::new(config_path)?;
 

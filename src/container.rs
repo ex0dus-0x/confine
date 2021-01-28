@@ -186,10 +186,3 @@ impl Container {
         Ok(())
     }
 }
-
-/*
-impl Drop for Container {
-    fn drop(&mut self) {
-    }
-}
-*/

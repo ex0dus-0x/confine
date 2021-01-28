@@ -1,6 +1,7 @@
 //! Defines the `Confinement` policy format for provisioning container environments for dynamic
 //! malware analysis.
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -31,7 +32,7 @@ impl Confinement {
         Ok(yaml)
     }
 
-    /// If called, pulls down the malware sample to the (assuming containerized) system if the
+    /// If called, pulls down the malware sample to the current system state if the
     /// developer included a `url` parameter in segment.
     pub fn pull_sample(&self) -> ConfineResult<Option<()>> {
         // return immediately if no url is specified
@@ -40,9 +41,21 @@ impl Confinement {
 
         // download to current path if set
         } else if let Some(url) = &self.sample.url {
-            log::trace!("Downloading sample");
-            let dl_resp = ureq::get(&url).call()?;
-            println!("{:?}", dl_resp);
+            log::trace!("Sending request to pull upstream sample from {}", url);
+            let resp = ureq::get(&url).call()?;
+
+            // get filename
+
+            let len = resp
+                .header("Content-Length")
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap();
+            log::trace!("Reading {} bytes of content from response", len);
+
+            let mut malware_sample: Vec<u8> = Vec::with_capacity(len);
+            resp.into_reader().read_to_end(&mut malware_sample)?;
+
+            log::trace!("Writing to current path");
         }
 
         Ok(Some(()))

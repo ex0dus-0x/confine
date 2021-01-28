@@ -89,9 +89,6 @@ impl Subprocess {
         log::debug!("Running PTRACE_SETOPTIONS");
         ptrace::setoptions(self.pid, ptrace::Options::PTRACE_O_TRACESYSGOOD)?;
 
-        log::debug!("Waiting for process to change execution state");
-        wait::waitpid(self.pid, None)?;
-
         // run loop until broken by end of execution
         loop {
             if self.step()? == 0 {
