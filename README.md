@@ -4,7 +4,7 @@
 </div>
 
 __confine__ is a light container runtime for dynamically analyzing suspicious executables.
-It's like Docker, but for threat analysts!
+It's like Docker's `runc`, but for threat analysts.
 
 ## Features
 

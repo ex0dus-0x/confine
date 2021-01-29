@@ -57,7 +57,6 @@ impl Confinement {
 
             log::trace!("Writing to current path");
         }
-
         Ok(Some(()))
     }
 }

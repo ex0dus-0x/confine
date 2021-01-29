@@ -1,7 +1,7 @@
 //! Defines the main debugr that is interfaced against for execution of a configuration.
-use nix::sys::signal::Signal;
-use nix::sched;
 use nix::mount::{self, MsFlags};
+use nix::sched;
+use nix::sys::signal::Signal;
 use nix::sys::wait;
 
 use std::process::Command;
@@ -39,7 +39,6 @@ impl Tracer {
     /// Encapsulates container runtime creation and process tracing execution under a callback that
     /// is cloned to run.
     pub fn run(&mut self) -> ConfineResult<()> {
-
         // prevent mounting container fs to host
         mount::mount(
             None::<&str>,
@@ -47,7 +46,7 @@ impl Tracer {
             None::<&str>,
             MsFlags::MS_REC | MsFlags::MS_PRIVATE,
             None::<&str>,
-        )?; 
+        )?;
 
         // initialize child process stack
         let stack = &mut [0; 1024 * 1024];

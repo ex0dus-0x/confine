@@ -62,7 +62,6 @@ fn parse_args<'a>() -> ArgMatches<'a> {
 }
 
 fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
-
     // set global log level to be `info` if `--trace` is set
     if matches.is_present("trace") {
         log::set_max_level(log::LevelFilter::Info);

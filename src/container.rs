@@ -169,7 +169,6 @@ impl Container {
         Ok(())
     }
 
-
     /// Container resource cleanup routine, replaces `Drop` implementation.
     pub fn cleanup(&self) -> ConfineResult<()> {
         log::trace!("Unmounting procfs in rootfs");
