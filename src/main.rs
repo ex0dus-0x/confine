@@ -10,7 +10,7 @@ mod syscall;
 mod threat;
 mod trace;
 
-use crate::policy::Confinement;
+use crate::policy::Policy;
 use crate::trace::Tracer;
 
 fn main() {
@@ -66,7 +66,7 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
         log::set_max_level(log::LevelFilter::Info);
     }
 
-    log::trace!("Checking path to `Confinement` configuration");
+    log::trace!("Checking path to `Confinement`");
     let mut config_path: PathBuf = PathBuf::from(matches.value_of("PATH").unwrap());
     config_path.push("Confinement");
     if !config_path.exists() {
@@ -76,8 +76,8 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
         );
     }
 
-    log::trace!("Parsing `Confinement` configuration");
-    let config: Confinement = Confinement::new(config_path)?;
+    log::trace!("Parsing `Confinement` policy");
+    let config: Policy = Policy::new(config_path)?;
 
     // other flags
     let rootfs: Option<&str> = matches.value_of("mount");

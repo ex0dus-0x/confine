@@ -1,4 +1,4 @@
-//! Defines the main debugr that is interfaced against for execution of a configuration.
+//! Defines the main debugr that is interfaced against for execution of a policyuration.
 use nix::mount::{self, MsFlags};
 use nix::sched;
 use nix::sys::signal::Signal;
@@ -8,15 +8,15 @@ use std::process::Command;
 
 mod subprocess;
 
-use crate::policy::Confinement;
+use crate::policy::Policy;
 use crate::container::Container;
 use crate::error::ConfineResult;
 use crate::trace::subprocess::Subprocess;
 
 /// Interface for tracing a given process and enforcing a given policy mapping.
 pub struct Tracer {
-    // configuration to be used during tracing
-    config: Confinement,
+    // policy to be used during tracing
+    policy: Policy,
 
     // container interface
     runtime: Container,
@@ -26,12 +26,12 @@ impl Tracer {
     /// Instantiates a new `Tracer` capable of dynamically tracing a process under a containerized
     /// environment, and enforcing policy rules.
     pub fn new(
-        config: Confinement,
+        policy: Policy,
         rootfs: Option<&str>,
         hostname: Option<&str>,
     ) -> ConfineResult<Self> {
         Ok(Self {
-            config,
+            policy,
             runtime: Container::init(rootfs, hostname)?,
         })
     }
@@ -87,18 +87,18 @@ impl Tracer {
         log::trace!("Starting container");
         self.runtime.start()?;
 
-        // pull malware sample to container if `url` is set for config
-        if self.config.pull_sample()?.is_some() {
+        // pull malware sample to container if `url` is set for policy
+        if self.policy.pull_sample()?.is_some() {
             log::info!("Pulling down malware sample from upstream source...");
         }
 
         // execute each step, creating a `Subprocess` for those that are marked to be debugd
         log::info!("Executing steps...");
-        for (idx, step) in self.config.execution.iter().enumerate() {
+        for (idx, step) in self.policy.get_exec().iter().enumerate() {
             let cmd: Vec<String> = step.command.clone();
             if let Some(true) = step.trace {
                 log::info!("Running traced step {}: `{}`...", idx + 1, step.name);
-                let mut sb: Subprocess = Subprocess::new(cmd, self.config.filter.clone())?;
+                let mut sb: Subprocess = Subprocess::new(cmd, self.policy.get_filter().clone())?;
 
                 log::debug!("Starting trace of the child");
                 sb.trace()?;
