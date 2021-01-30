@@ -41,7 +41,7 @@ pub struct Rule {
 
 /// Represents a parsed policy configuration used for enforcing against the trace.
 #[derive(Deserialize, Debug, Clone)]
-pub struct Policy {
+pub struct Filter {
     // if set, defines a path where syscalls are logged to
     pub logpath: Option<PathBuf>,
 
@@ -49,7 +49,7 @@ pub struct Policy {
     pub rules: Vec<Rule>,
 }
 
-impl Policy {
+impl Filter {
     /// Checks if a given syscall name is set as a rule, and return action to enforce if found.
     pub fn get_enforcement(&self, syscall: &str) -> Option<Action> {
         self.rules

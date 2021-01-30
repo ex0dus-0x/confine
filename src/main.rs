@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use clap::{App, AppSettings, Arg, ArgMatches};
 
-mod config;
 mod container;
 mod error;
 mod policy;
@@ -11,7 +10,7 @@ mod syscall;
 mod threat;
 mod trace;
 
-use crate::config::Confinement;
+use crate::policy::Confinement;
 use crate::trace::Tracer;
 
 fn main() {

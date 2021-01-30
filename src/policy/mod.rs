@@ -6,8 +6,28 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
+pub mod filter;
+
 use crate::error::ConfineResult;
-use crate::policy::Policy;
+use crate::policy::filter::Filter;
+
+/// Provides an interface for parsing a `Confinement` from a given workspace
+pub struct Config {
+    // stores path to workspace with `Confinement` for internal use
+    workspace: PathBuf,
+
+    // stores parsed Confinement
+    config: Confinement,
+}
+
+impl Config {
+    fn new(workspace: PathBuf) -> ConfineResult<Self> {
+        Self {
+            workspace,
+        }
+    }
+}
+
 
 /// Defines the root of a Confinement configuration that gets parsed out from a given path that
 /// bootstraps the analysis of an executable sample.
@@ -16,8 +36,8 @@ pub struct Confinement {
     // metadata about the target sample being analyzed
     pub sample: Sample,
 
-    // optional policy for enforcement
-    pub policy: Option<Policy>,
+    // optional syscall filters for enforcement
+    pub filter: Option<Filter>,
 
     // defines workflow steps necessary to execute environment with sample
     pub execution: Vec<Step>,
@@ -44,8 +64,6 @@ impl Confinement {
             log::trace!("Sending request to pull upstream sample from {}", url);
             let resp = ureq::get(&url).call()?;
 
-            // get filename
-
             let len = resp
                 .header("Content-Length")
                 .and_then(|s| s.parse::<usize>().ok())
@@ -56,6 +74,7 @@ impl Confinement {
             resp.into_reader().read_to_end(&mut malware_sample)?;
 
             log::trace!("Writing to current path");
+            
         }
         Ok(Some(()))
     }

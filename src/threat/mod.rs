@@ -63,7 +63,7 @@ impl ThreatReport {
 
                 // check if a known for persistence
                 self.capabilities.persistence.check(buffer.to_string());
-            }
+            },
 
             // if an file IO syscall is encountered, get filename and mode
             "open" | "openat" | "stat" | "fstat" | "lstat" | "chdir" | "chmod" | "chown"
@@ -84,7 +84,7 @@ impl ThreatReport {
 
                 // insert path and its flag
                 self.file_io.insert(file.to_string(), format!("{}", flag));
-            }
+            },
 
             // if a child command is launched, record executable and arguments
             "execve" | "execveat" | "execlp" | "execvp" => {
@@ -96,12 +96,12 @@ impl ThreatReport {
                 let args_key: String = "const char *const *argv".to_string();
                 let args: &str = syscall.args.get(&args_key).unwrap().as_str().unwrap();
                 self.commands.push(format!("{} {}", cmd, args));
-            }
+            },
 
             // check if syscalls for blocking are called
             "nanosleep" | "clock_nanosleep" => {
                 self.capabilities.evasion.stalling = true;
-            }
+            },
 
             // check for antidebug and potential process injection
             "ptrace" => {
@@ -121,7 +121,7 @@ impl ThreatReport {
 
                     _ => {}
                 }
-            }
+            },
 
             // detect process deception by renaming
             "prctl" => {
@@ -130,7 +130,7 @@ impl ThreatReport {
                 if option == 15 {
                     self.capabilities.deception = true;
                 }
-            }
+            },
 
             // TODO: networking
             _ => {}

@@ -13,7 +13,7 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 use crate::error::{ConfineError, ConfineResult};
-use crate::policy::{Action, Policy};
+use crate::policy::filter::{Action, Filter};
 use crate::syscall::{ArgMap, ParsedSyscall, SyscallManager};
 use crate::threat::ThreatReport;
 
@@ -37,7 +37,7 @@ pub struct Subprocess {
     pid: Pid,
 
     // policy containing rules for enforcement
-    policy: Option<Policy>,
+    policy: Option<Filter>,
 
     // interfaces system call representation parsing
     manager: SyscallManager,
@@ -49,7 +49,7 @@ pub struct Subprocess {
 impl Subprocess {
     /// Creates new interface with the args to a command in a Confinement, and optionally a
     /// specified policy section.
-    pub fn new(args: Vec<String>, policy: Option<Policy>) -> ConfineResult<Self> {
+    pub fn new(args: Vec<String>, policy: Option<Filter>) -> ConfineResult<Self> {
         let mut cmd = Command::new(&args[0]);
         for arg in args.iter().skip(1) {
             cmd.arg(arg);

@@ -8,7 +8,7 @@ use std::process::Command;
 
 mod subprocess;
 
-use crate::config::Confinement;
+use crate::policy::Confinement;
 use crate::container::Container;
 use crate::error::ConfineResult;
 use crate::trace::subprocess::Subprocess;
@@ -98,7 +98,7 @@ impl Tracer {
             let cmd: Vec<String> = step.command.clone();
             if let Some(true) = step.trace {
                 log::info!("Running traced step {}: `{}`...", idx + 1, step.name);
-                let mut sb: Subprocess = Subprocess::new(cmd, self.config.policy.clone())?;
+                let mut sb: Subprocess = Subprocess::new(cmd, self.config.filter.clone())?;
 
                 log::debug!("Starting trace of the child");
                 sb.trace()?;
