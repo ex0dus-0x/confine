@@ -30,9 +30,10 @@ impl Tracer {
         rootfs: Option<&str>,
         hostname: Option<&str>,
     ) -> ConfineResult<Self> {
+        let runtime = Container::init(rootfs, &policy, hostname)?;
         Ok(Self {
             policy,
-            runtime: Container::init(rootfs, hostname)?,
+            runtime,
         })
     }
 
@@ -69,28 +70,21 @@ impl Tracer {
             | sched::CloneFlags::CLONE_NEWIPC
             | sched::CloneFlags::CLONE_NEWNET;
 
-        // clone new process with callback
         log::trace!("Cloning new process with unshared namespaces");
         let child = sched::clone(callback, stack, clone_flags, Some(Signal::SIGCHLD as i32))?;
 
-        // wait for child to finish execution
         log::debug!("Waiting for process to complete");
         wait::waitpid(child, None)?;
         Ok(())
     }
 
-    /// Executes a dynamic `pdebug`-based debug upon the given application specified. Will first
+    /// Executes a dynamic `ptrace`-based debug upon the given application specified. Will first
     /// instantiate a containerized environment with unshared namespaces and a seperately mounted
     /// filesystem, and then spawn the debuge.
     fn exec_container_debug(&mut self) -> ConfineResult<isize> {
         // create the container environment to execute processes under
         log::trace!("Starting container");
         self.runtime.start()?;
-
-        // pull malware sample to container if `url` is set for policy
-        if self.policy.pull_sample()?.is_some() {
-            log::info!("Pulling down malware sample from upstream source...");
-        }
 
         // execute each step, creating a `Subprocess` for those that are marked to be debugd
         log::info!("Executing steps...");

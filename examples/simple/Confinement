@@ -17,18 +17,19 @@ filter:
           syscall: exit_group
           action: BLOCK
 
+setup:
+    - name: Build
+      trace: false
+      description: Build smoke screen test
+      command: ["gcc", "example.c"]
+
 execution:
     - name: Check directory
       trace: true
       description: Traces ls
       command: ["/bin/ls"]
 
-    - name: Build
-      trace: false
-      description: Build smoke screen test
-      command: ["gcc", "-o", "sample", "example.c"]
-
     - name: Run sample
       trace: true
       description: Run and trace the sample
-      command: ["./sample"]
+      command: ["./a.out"]

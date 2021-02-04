@@ -11,10 +11,11 @@ pub mod filter;
 use crate::error::ConfineResult;
 use crate::policy::filter::Filter;
 
-/// Provides an interface for parsing a `Confinement` from a given workspace
+/// Provides an interface for parsing a `Confinement` from a given workspace, and copying over
+/// the workspace directory state over to the rootfs
 pub struct Policy {
     // stores path to workspace with `Confinement`, used later to read out other resources
-    workspace: PathBuf,
+    pub workspace: PathBuf,
 
     // stores parsed Confinement
     pub config: Confinement,
@@ -52,29 +53,28 @@ impl Policy {
                 .header("Content-Length")
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap();
-            log::trace!("Reading {} bytes of content from response", len);
 
+            log::trace!("Reading {} bytes of content from response", len);
             let mut malware_sample: Vec<u8> = Vec::with_capacity(len);
             resp.into_reader().read_to_end(&mut malware_sample)?;
 
             log::trace!("Writing to current path");
-            
+            unimplemented!();
         }
         Ok(Some(()))
     }
 
-    /// Copies all the paths from the workspace to the current path, most likely the tmpdir
-    /// created for the rootfs mount.
-    pub fn copy_workspace(&self) -> ConfineResult<()> {
-        Ok(())
+    /// Getter for configuration setup steps to run before containerization.
+    pub fn get_setup(&self) -> Vec<Step> {
+        self.config.setup.clone()
     }
 
-    /// Getter for configuration execution steps
+    /// Getter for configuration execution steps to run during containerization.
     pub fn get_exec(&self) -> Vec<Step> {
         self.config.execution.clone()
     }
 
-    /// Getter for syscall filter
+    /// Getter for syscall filter for enforcement during tracing.
     pub fn get_filter(&self) -> Option<Filter> {
         self.config.filter.clone()
     }
@@ -90,6 +90,9 @@ pub struct Confinement {
 
     // optional syscall filters for enforcement
     pub filter: Option<Filter>,
+
+    // optional setup stage to execute before initializing environment
+    pub setup: Vec<Step>,
 
     // defines workflow steps necessary to execute environment with sample
     pub execution: Vec<Step>,

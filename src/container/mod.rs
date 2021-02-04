@@ -12,6 +12,7 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 use crate::error::ConfineResult;
+use crate::policy::Policy;
 
 const ALPINE_BASE_URL: &str =
     "https://dl-cdn.alpinelinux.org/alpine/v3.13/releases/x86_64/alpine-minirootfs-3.13.0-x86_64.tar.gz";
@@ -35,9 +36,10 @@ pub struct Container {
 }
 
 impl Container {
-    /// Initializes new `Container` with initial state of where resources are located
-    /// in the host filesystem.
-    pub fn init(rootfs: Option<&str>, _hostname: Option<&str>) -> ConfineResult<Self> {
+
+    /// Creates initial state of the environment that is necessary for container provisioning,
+    /// includes rootfs mount and workspace containing resources, and other configs.
+    pub fn init(rootfs: Option<&str>, policy: &Policy, _hostname: Option<&str>) -> ConfineResult<Self> {
         // initialize cgroup, check if supported in kernel
         let mut cgroups = PathBuf::from("/sys/fs/cgroup/pids");
         if !cgroups.exists() {
@@ -75,6 +77,13 @@ impl Container {
         };
 
         log::trace!("Mountpath: {:?}", mountpath);
+
+        // with new mountpath, copy over contents of workspace over to /home directory
+
+        // with new mountpath, pull sample if `url` is set for policy
+        if policy.pull_sample()?.is_some() {
+            log::info!("Pulling down malware sample from upstream source...");
+        }
 
         Ok(Self {
             hostname,
