@@ -51,6 +51,7 @@ impl Subprocess {
     /// specified policy section.
     pub fn new(args: Vec<String>, policy: Option<Filter>) -> ConfineResult<Self> {
         let mut cmd = Command::new(&args[0]);
+        cmd.env("PATH", "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin");
         for arg in args.iter().skip(1) {
             cmd.arg(arg);
         }

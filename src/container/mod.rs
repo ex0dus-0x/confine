@@ -1,5 +1,7 @@
 //! Implements container runtime that is initialized before the execution of the debuge.
-use nix::{mount, sched, unistd};
+use nix::{sched, unistd};
+use nix::sys::stat;
+use nix::mount::{self, MsFlags};
 
 use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
@@ -13,10 +15,12 @@ use crate::error::ConfineResult;
 
 const ALPINE_BASE_URL: &str =
     "https://dl-cdn.alpinelinux.org/alpine/v3.13/releases/x86_64/alpine-minirootfs-3.13.0-x86_64.tar.gz";
+
 /*
 const UBUNTU_BASE_URL: &str =
-    "http://cdimage.ubuntu.com/ubuntu-base/releases/14.04/release/ubuntu-base-14.04.6-base-arm64.tar.gz";
+    "http://cdimage.ubuntu.com/ubuntu-base/releases/14.04/release/ubuntu-base-14.04-core-amd64.tar.gz";
 */
+
 
 /// Encapsulates implementation and resource deallocation of a container runtime.
 pub struct Container {
@@ -96,7 +100,7 @@ impl Container {
         fs::create_dir(rootfs)?;
         env::set_current_dir(rootfs)?;
 
-        log::info!("Downloading alpine rootfs from upstream...");
+        log::info!("Downloading base image from upstream...");
         let resp = ureq::get(ALPINE_BASE_URL).call()?;
 
         let len = resp
@@ -122,53 +126,92 @@ impl Container {
         sched::unshare(sched::CloneFlags::CLONE_NEWNS)?;
 
         // keep ptrace capabilities
-        log::info!("Preserving capabilities...");
+        log::info!("Preserving necessary capabilities...");
         unsafe {
             let _ = libc::prctl(libc::SYS_ptrace as i32);
         }
 
+        log::info!("Initialize cgroups for restricted resources...");
+        self.init_cgroups()?;
+
+        log::info!("Mounting base image...");
+        self.init_mountpath()?;
+
+        log::info!("Setting new hostname `{}`...", self.hostname);
+        unistd::sethostname(&self.hostname)?;
+        Ok(())
+    }
+
+    /// Configures a new cgroups for the isolated process.
+    fn init_cgroups(&self) -> ConfineResult<()> {
         // initialize new cgroups directory if not found
         if !self.cgroups.exists() {
-            log::info!("Initialize cgroups for restricted resources...");
+            log::trace!("Creating cgroups directory");
             fs::create_dir_all(&self.cgroups)?;
             let mut permission = fs::metadata(&self.cgroups)?.permissions();
             permission.set_mode(511);
             fs::set_permissions(&self.cgroups, permission).ok();
         }
 
-        log::debug!("Writing to cgroups directory");
+        log::trace!("Writing to cgroups directory");
         fs::write(self.cgroups.join("pids.max"), b"20")?;
         fs::write(self.cgroups.join("notify_on_release"), b"1")?;
         fs::write(self.cgroups.join("cgroup.procs"), b"0")?;
+        Ok(())
+    }
 
-        log::info!("Setting new hostname `{}`...", self.hostname);
-        unistd::sethostname(&self.hostname)?;
+    /// Configures necessary filesystem mount sfor the isolated process.
+    fn init_mountpath(&self) -> ConfineResult<()> {
+        // new_root and put_old must not be on the same filesystem as the current root
+        let rootfs: Option<&str> = self.mountpath.to_str();
+        mount::mount(
+            rootfs,
+            rootfs.unwrap(),
+            Some("bind"),
+            MsFlags::MS_BIND | MsFlags::MS_REC,
+            None::<&str>,
+        )?;
 
-        log::info!("Mounting rootfs to root path...");
-        unistd::chroot(&self.mountpath)?;
+        log::trace!("Creating path from the previous rootfs");
+        let put_old: PathBuf = self.mountpath.join(".pivot_root");
 
-        log::debug!("Changing to `/` dir in rootfs");
-        unistd::chdir("/home")?;
+        // remove if exists, and recreate
+        if put_old.exists() {
+            fs::remove_dir_all(&put_old)?;
+        }
+        unistd::mkdir(
+            &put_old,
+            stat::Mode::S_IRWXU | stat::Mode::S_IRWXG | stat::Mode::S_IRWXO
+        )?;
+
+        log::trace!("Mounting with pivot_root");
+        unistd::pivot_root(&self.mountpath, &put_old)?;
+
+        log::trace!("Changing to `/` dir");
+        unistd::chdir("/")?;
 
         // mount the procfs in container to hide away host processes
-        log::info!("Mounting procfs...");
+        log::trace!("Mounting procfs");
         mount::mount(
             Some("proc"),
             "/proc",
             Some("proc"),
-            mount::MsFlags::empty(),
+            MsFlags::empty(),
             None::<&str>,
         )?;
 
         // mount tmpfs
-        log::info!("Mounting tmpfs...");
+        log::trace!("Mounting tmpfs");
         mount::mount(
             Some("tmpfs"),
             "/dev",
             Some("tmpfs"),
-            mount::MsFlags::empty(),
+            MsFlags::empty(),
             None::<&str>,
         )?;
+
+        // unmount previous root
+        // delete previous root
         Ok(())
     }
 

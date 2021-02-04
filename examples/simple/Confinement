@@ -18,7 +18,17 @@ filter:
           action: BLOCK
 
 execution:
-    - name: run
+    - name: Check directory
       trace: true
-      description: Runs the sample
+      description: Traces ls
       command: ["/bin/ls"]
+
+    - name: Build
+      trace: false
+      description: Build smoke screen test
+      command: ["gcc", "-o", "sample", "example.c"]
+
+    - name: Run sample
+      trace: true
+      description: Run and trace the sample
+      command: ["./sample"]

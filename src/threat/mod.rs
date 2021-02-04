@@ -66,9 +66,10 @@ impl ThreatReport {
             },
 
             // if an file IO syscall is encountered, get filename and mode
-            "open" | "openat" | "stat" | "fstat" | "lstat" | "chdir" | "chmod" | "chown"
+            "open" | "openat" | "stat" | "lstat" | "chdir" | "chmod" | "chown"
             | "lchown" | "fchownat" | "newfstatat" | "fchmodat" | "faccessat" | "mkdnod"
             | "mknodat" => {
+
                 // get filename
                 let pathname_key: String = "const char *filename".to_string();
                 let file: &str = syscall.args.get(&pathname_key).unwrap().as_str().unwrap();
@@ -85,6 +86,8 @@ impl ThreatReport {
                 // insert path and its flag
                 self.file_io.insert(file.to_string(), format!("{}", flag));
             },
+
+            // TODO: fstat
 
             // if a child command is launched, record executable and arguments
             "execve" | "execveat" | "execlp" | "execvp" => {
