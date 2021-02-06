@@ -54,7 +54,7 @@ impl Tracer {
 
         // create function callback for cloning, with error-handling
         let callback = Box::new(|| {
-            if let Err(e) = self.exec_container_debug() {
+            if let Err(e) = self.trace() {
                 log::error!("{}", e);
                 -1
             } else {
@@ -78,15 +78,20 @@ impl Tracer {
         Ok(())
     }
 
-    /// Executes a dynamic `ptrace`-based debug upon the given application specified. Will first
-    /// instantiate a containerized environment with unshared namespaces and a seperately mounted
-    /// filesystem, and then spawn the debuge.
-    fn exec_container_debug(&mut self) -> ConfineResult<isize> {
+    /// Dynamically traces the application specified in the container environment.
+    fn trace(&mut self) -> ConfineResult<isize> {
+
+        // execute setup steps TODO
+        log::info!("Setting up the environment...");
+        for _step in self.policy.get_setup().iter() {
+
+        }
+
         // create the container environment to execute processes under
         log::trace!("Starting container");
         self.runtime.start()?;
 
-        // execute each step, creating a `Subprocess` for those that are marked to be debugd
+        // execute each step, creating a `Subprocess` for those that are marked to be debugged
         log::info!("Executing steps...");
         for (idx, step) in self.policy.get_exec().iter().enumerate() {
             let cmd: Vec<String> = step.command.clone();

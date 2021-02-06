@@ -10,9 +10,12 @@ use std::{env, fs};
 
 use flate2::read::GzDecoder;
 use tar::Archive;
+use walkdir::WalkDir;
 
 use crate::error::ConfineResult;
 use crate::policy::Policy;
+
+// TODO: small image management module
 
 const ALPINE_BASE_URL: &str =
     "https://dl-cdn.alpinelinux.org/alpine/v3.13/releases/x86_64/alpine-minirootfs-3.13.0-x86_64.tar.gz";
@@ -21,7 +24,6 @@ const ALPINE_BASE_URL: &str =
 const UBUNTU_BASE_URL: &str =
     "http://cdimage.ubuntu.com/ubuntu-base/releases/14.04/release/ubuntu-base-14.04-core-amd64.tar.gz";
 */
-
 
 /// Encapsulates implementation and resource deallocation of a container runtime.
 pub struct Container {
@@ -56,7 +58,7 @@ impl Container {
             None => Container::gen_hostname(),
         };
 
-        log::trace!("Hostname: {}", hostname);
+        log::debug!("Hostname: {}", hostname);
 
         // if mountpath isn't specified, create temp one with new rootfs immediately
         let mountpath: PathBuf = match rootfs {
@@ -76,12 +78,26 @@ impl Container {
             }
         };
 
-        log::trace!("Mountpath: {:?}", mountpath);
+        log::debug!("Mountpath: {:?}", mountpath);
 
         // with new mountpath, copy over contents of workspace over to /home directory
+        let new_ws: PathBuf = mountpath.join("home");
+
+        for entry in WalkDir::new(&policy.workspace).into_iter().filter_map(|e| e.ok()) {
+            let copy_path = entry.path();
+
+            // skip directories and Confinements
+            if copy_path.is_dir() || copy_path.ends_with("Confinement") {
+                continue;
+            }
+
+            let new_path: PathBuf = new_ws.join(copy_path.file_name().unwrap());
+            log::trace!("Copying {:?} to {:?}", entry, new_path);
+            fs::copy(&copy_path, &new_path)?;
+        }
 
         // with new mountpath, pull sample if `url` is set for policy
-        if policy.pull_sample()?.is_some() {
+        if policy.pull_sample(&mountpath)?.is_some() {
             log::info!("Pulling down malware sample from upstream source...");
         }
 
@@ -196,8 +212,12 @@ impl Container {
         log::trace!("Mounting with pivot_root");
         unistd::pivot_root(&self.mountpath, &put_old)?;
 
-        log::trace!("Changing to `/` dir");
-        unistd::chdir("/")?;
+        log::trace!("Changing to `/home` dir");
+        unistd::chdir("/home")?;
+
+        log::trace!("Unmounting and deleting old rootfs");
+        mount::umount2("/.pivot_root", mount::MntFlags::MNT_DETACH)?;
+        fs::remove_dir_all("/.pivot_root")?;
 
         // mount the procfs in container to hide away host processes
         log::trace!("Mounting procfs");
@@ -218,9 +238,6 @@ impl Container {
             MsFlags::empty(),
             None::<&str>,
         )?;
-
-        // unmount previous root
-        // delete previous root
         Ok(())
     }
 
@@ -232,7 +249,6 @@ impl Container {
         log::trace!("Unmounting procfs in rootfs");
         mount::umount("/dev")?;
 
-        // get rid of cgroups limits
         if self.cgroups.exists() {
             log::trace!("Removing cgroups");
             fs::remove_dir(&self.cgroups)?;

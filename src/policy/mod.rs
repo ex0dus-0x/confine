@@ -25,21 +25,21 @@ impl Policy {
     pub fn new(config_path: PathBuf) -> ConfineResult<Self> {
         let config: Confinement = Confinement::new(&config_path)?;
 
-        // check if workspace directory exists
+        // get parent as workspace path
         let workspace = match config_path.parent() {
             Some(dir) => dir.to_path_buf(),
             None => unreachable!(),
         };
 
         Ok(Self {
-            workspace,
+            workspace: fs::canonicalize(&workspace)?,
             config
         })
     }
 
     /// If called, pulls down the malware sample to the current workspace if the
     /// developer included a `url` parameter in segment.
-    pub fn pull_sample(&self) -> ConfineResult<Option<()>> {
+    pub fn pull_sample(&self, to: &PathBuf) -> ConfineResult<Option<()>> {
         // return immediately if no url is specified
         if self.config.sample.url.is_none() {
             return Ok(None);
@@ -58,7 +58,8 @@ impl Policy {
             let mut malware_sample: Vec<u8> = Vec::with_capacity(len);
             resp.into_reader().read_to_end(&mut malware_sample)?;
 
-            log::trace!("Writing to current path");
+            let write_path: PathBuf = to.join("suspicious.sample");
+            log::trace!("Writing to directory specified: {:?}", write_path);
             unimplemented!();
         }
         Ok(Some(()))
