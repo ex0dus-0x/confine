@@ -81,10 +81,24 @@ impl Tracer {
     /// Dynamically traces the application specified in the container environment.
     fn trace(&mut self) -> ConfineResult<isize> {
 
-        // execute setup steps TODO
-        log::info!("Setting up the environment...");
-        for _step in self.policy.get_setup().iter() {
+        // go to workspace
+        std::env::set_current_dir(&self.policy.workspace)?;
 
+        // execute setup steps before going into container
+        log::info!("Setting up the environment...");
+        for (idx, step) in self.policy.get_setup().iter().enumerate() {
+            let cmd: Vec<String> = step.command.clone();
+            let mut exec: Command = Command::new(&cmd[0]);
+            for arg in cmd.iter().skip(1) {
+                exec.arg(arg);
+            }
+
+            log::debug!("Running setup step {}", idx + 1);
+            let status = exec.spawn()?.wait()?;
+
+            // TODO: handle stopping and outputting error
+            if !status.success() {
+            }
         }
 
         // create the container environment to execute processes under
@@ -97,7 +111,7 @@ impl Tracer {
             let cmd: Vec<String> = step.command.clone();
             if let Some(true) = step.trace {
                 log::info!("Running traced step {}: `{}`...", idx + 1, step.name);
-                let mut sb: Subprocess = Subprocess::new(cmd, self.policy.get_filter().clone())?;
+                let mut sb = Subprocess::new(cmd, self.policy.get_filter().clone())?;
 
                 log::debug!("Starting trace of the child");
                 sb.trace()?;

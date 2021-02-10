@@ -78,7 +78,7 @@ impl Subprocess {
         // spawns a child process handler
         log::info!("Spawning target executable in containerized environment");
 
-        log::debug!("Launching child process");
+        log::debug!("Launching child process in {:?}", std::env::current_dir()?);
         let child = self.cmd.spawn()?;
 
         // save Pid, save state for later use

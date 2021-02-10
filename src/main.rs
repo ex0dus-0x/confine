@@ -35,7 +35,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         )
         .arg(
             Arg::with_name("mount")
-                .help("Override mountpoint for custom rootfs instead of default Alpine.")
+                .help("Override mountpoint for custom rootfs instead of default base image.")
                 .long("mount")
                 .takes_value(true)
                 .value_name("ROOTFS")

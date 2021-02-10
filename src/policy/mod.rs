@@ -60,7 +60,8 @@ impl Policy {
 
             let write_path: PathBuf = to.join("suspicious.sample");
             log::trace!("Writing to directory specified: {:?}", write_path);
-            unimplemented!();
+            fs::write(&write_path, &malware_sample)?;
+
         }
         Ok(Some(()))
     }

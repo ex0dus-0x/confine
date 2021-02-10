@@ -17,13 +17,12 @@ use crate::policy::Policy;
 
 // TODO: small image management module
 
+/*
 const ALPINE_BASE_URL: &str =
     "https://dl-cdn.alpinelinux.org/alpine/v3.13/releases/x86_64/alpine-minirootfs-3.13.0-x86_64.tar.gz";
-
-/*
+*/
 const UBUNTU_BASE_URL: &str =
     "http://cdimage.ubuntu.com/ubuntu-base/releases/14.04/release/ubuntu-base-14.04-core-amd64.tar.gz";
-*/
 
 /// Encapsulates implementation and resource deallocation of a container runtime.
 pub struct Container {
@@ -126,7 +125,7 @@ impl Container {
         env::set_current_dir(rootfs)?;
 
         log::info!("Downloading base image from upstream...");
-        let resp = ureq::get(ALPINE_BASE_URL).call()?;
+        let resp = ureq::get(UBUNTU_BASE_URL).call()?;
 
         let len = resp
             .header("Content-Length")
@@ -243,10 +242,10 @@ impl Container {
 
     /// Container resource cleanup routine, replaces `Drop` implementation.
     pub fn cleanup(&self) -> ConfineResult<()> {
-        log::trace!("Unmounting procfs in rootfs");
+        log::trace!("Unmounting procfs");
         mount::umount("/proc")?;
 
-        log::trace!("Unmounting procfs in rootfs");
+        log::trace!("Unmounting tmpfs");
         mount::umount("/dev")?;
 
         if self.cgroups.exists() {

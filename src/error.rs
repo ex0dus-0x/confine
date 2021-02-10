@@ -28,7 +28,7 @@ pub enum ConfineError {
     ParseError(String),
 
     // ureq http req errors
-    HttpError(ReqError),
+    HttpError(String),
 }
 
 impl Display for ConfineError {
@@ -71,6 +71,6 @@ impl From<YAMLError> for ConfineError {
 
 impl From<ReqError> for ConfineError {
     fn from(err: ReqError) -> ConfineError {
-        ConfineError::HttpError(err)
+        ConfineError::HttpError(err.to_string())
     }
 }
