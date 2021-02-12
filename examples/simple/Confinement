@@ -1,35 +1,31 @@
+# Defines basic identifying information
 sample:
     name: Simple Command Execution
-    description: Traces a simple command executing in a confine container
+    image: ./rootfs
+    hostname: sample
 
-filter:
+blacklist:
     logpath: test.log
     rules:
-        - name: Open warn rule
-          syscall: openat
+        - syscall: openat
           action: WARN
 
-        - name: Close log rule
-          syscall: close
+        - syscall: close
           action: LOG
 
-        - name: Exit block rule
-          syscall: exit_group
+        - syscall: exit_group
           action: BLOCK
 
-setup:
-    - name: Build
-      trace: false
-      description: Build smoke screen test
-      command: ["gcc", "example.c"]
+provision:
+    setup:
+      - name: Build smoke screen test
+        trace: false
+        command: ["gcc", "example.c"]
 
-execution:
-    - name: Check directory
-      trace: true
-      description: Traces ls
-      command: ["/bin/ls"]
+    execution:
+      - name: Check directory
+        command: ["/bin/ls"]
 
-    - name: Run sample
-      trace: true
-      description: Run and trace the sample
-      command: ["./a.out"]
+      - name: Run sample
+        trace: true
+        command: ["./a.out"]

@@ -34,7 +34,6 @@ impl<'de> Deserialize<'de> for Action {
 /// Wrapper around a syscall rule that gets added to our policy map.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Rule {
-    pub name: String,
     pub syscall: String,
     pub action: Action,
 }

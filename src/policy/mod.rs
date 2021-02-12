@@ -68,12 +68,12 @@ impl Policy {
 
     /// Getter for configuration setup steps to run before containerization.
     pub fn get_setup(&self) -> Vec<Step> {
-        self.config.setup.clone()
+        self.config.provision.setup.clone()
     }
 
     /// Getter for configuration execution steps to run during containerization.
     pub fn get_exec(&self) -> Vec<Step> {
-        self.config.execution.clone()
+        self.config.provision.execution.clone()
     }
 
     /// Getter for syscall filter for enforcement during tracing.
@@ -81,7 +81,6 @@ impl Policy {
         self.config.filter.clone()
     }
 }
-
 
 /// Defines the root of a Confinement configuration that gets parsed out from a given path that
 /// bootstraps the analysis of an executable sample.
@@ -93,11 +92,8 @@ pub struct Confinement {
     // optional syscall filters for enforcement
     pub filter: Option<Filter>,
 
-    // optional setup stage to execute before initializing environment
-    pub setup: Vec<Step>,
-
-    // defines workflow steps necessary to execute environment with sample
-    pub execution: Vec<Step>,
+    // defines setup and execution steps
+    pub provision: Provision,
 }
 
 impl Confinement {
@@ -111,22 +107,33 @@ impl Confinement {
 }
 
 /// Provides a definition into the sample that is to be traced or processed, whether it exists
-/// upstream from some dataset, or if it needs to be build
+/// upstream from some dataset, or if it needs to be build.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Sample {
     // name of target being analyzed
     name: String,
 
-    // optional description about the sample
-    description: Option<String>,
+    // optional path to the mountpoint (WIP: support pulling Docker builds)
+    image: Option<String>,
+
+    // optional configured hostname, otherwise will be randomly generated
+    hostname: Option<String>,
 
     // optional URL to denote upstream path to sample, which can be furthered processed
     url: Option<String>,
 }
 
-/// Defines sequential step executed in the container to properly setup the environment for
-/// dynamic tracing. Useful if sample needs to be compiled, or there are extra steps to extrapolate
-/// it from upstream.
+
+/// Defines sequential step executed in the container to properly setup the environment.
+#[derive(Deserialize, Debug, Clone)]
+pub struct Provision {
+    // optional setup stage to execute before initializing environment
+    pub setup: Vec<Step>,
+
+    // defines workflow steps necessary to execute environment with sample
+    pub execution: Vec<Step>,
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct Step {
     // name identifier for the step
