@@ -33,7 +33,7 @@ impl Policy {
 
         Ok(Self {
             workspace: fs::canonicalize(&workspace)?,
-            config
+            config,
         })
     }
 
@@ -61,13 +61,22 @@ impl Policy {
             let write_path: PathBuf = to.join("suspicious.sample");
             log::trace!("Writing to directory specified: {:?}", write_path);
             fs::write(&write_path, &malware_sample)?;
-
         }
         Ok(Some(()))
     }
 
+    /// Getter for hostname
+    pub fn get_hostname(&self) -> Option<String> {
+        self.config.sample.hostname.clone()
+    }
+
+    /// Getter for persistent mountpath
+    pub fn get_mountpath(&self) -> Option<String> {
+        self.config.sample.image.clone()
+    }
+
     /// Getter for configuration setup steps to run before containerization.
-    pub fn get_setup(&self) -> Vec<Step> {
+    pub fn get_setup(&self) -> Option<Vec<Step>> {
         self.config.provision.setup.clone()
     }
 
@@ -123,12 +132,11 @@ pub struct Sample {
     url: Option<String>,
 }
 
-
-/// Defines sequential step executed in the container to properly setup the environment.
+/// Defines sequential steps executed in the container to properly setup the environment.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Provision {
     // optional setup stage to execute before initializing environment
-    pub setup: Vec<Step>,
+    pub setup: Option<Vec<Step>>,
 
     // defines workflow steps necessary to execute environment with sample
     pub execution: Vec<Step>,
@@ -136,7 +144,7 @@ pub struct Provision {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Step {
-    // name identifier for the step
+    // optional name identifier for the step
     pub name: String,
 
     // if set, dynamic tracing will occur during this step and output capabilities report

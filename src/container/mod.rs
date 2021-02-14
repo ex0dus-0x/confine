@@ -1,7 +1,7 @@
 //! Implements container runtime that is initialized before the execution of the debugger.
-use nix::{sched, unistd};
-use nix::sys::stat;
 use nix::mount::{self, MsFlags};
+use nix::sys::stat;
+use nix::{sched, unistd};
 
 use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
@@ -31,10 +31,9 @@ pub struct Container {
 }
 
 impl Container {
-
     /// Creates initial state of the environment that is necessary for container provisioning,
     /// includes rootfs mount and workspace containing resources, and other configs.
-    pub fn init(rootfs: Option<&str>, policy: &Policy, _hostname: Option<&str>) -> ConfineResult<Self> {
+    pub fn init(policy: &Policy) -> ConfineResult<Self> {
         // initialize cgroup, check if supported in kernel
         let mut cgroups = PathBuf::from("/sys/fs/cgroup/pids");
         if !cgroups.exists() {
@@ -46,7 +45,7 @@ impl Container {
         log::trace!("Cgroups path: {:?}", cgroups);
 
         // check if optional hostname specified, otherwise generate random
-        let hostname: String = match _hostname {
+        let hostname: String = match policy.get_hostname() {
             Some(hn) => hn.to_string(),
             None => Container::gen_hostname(),
         };
@@ -54,7 +53,7 @@ impl Container {
         log::debug!("Hostname: {}", hostname);
 
         // if mountpath isn't specified, create temp one with new rootfs immediately
-        let mountpath: PathBuf = match rootfs {
+        let mountpath: PathBuf = match policy.get_mountpath() {
             Some(path) => {
                 let mut abspath = PathBuf::new();
                 abspath.push(env::current_dir()?);
@@ -76,7 +75,10 @@ impl Container {
         // with new mountpath, copy over contents of workspace over to /home directory
         let new_ws: PathBuf = mountpath.join("home");
 
-        for entry in WalkDir::new(&policy.workspace).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(&policy.workspace)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             let copy_path = entry.path();
 
             // skip directories and Confinements
@@ -199,7 +201,7 @@ impl Container {
         }
         unistd::mkdir(
             &put_old,
-            stat::Mode::S_IRWXU | stat::Mode::S_IRWXG | stat::Mode::S_IRWXO
+            stat::Mode::S_IRWXU | stat::Mode::S_IRWXG | stat::Mode::S_IRWXO,
         )?;
 
         log::trace!("Mounting with pivot_root");

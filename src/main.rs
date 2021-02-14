@@ -1,7 +1,10 @@
+use std::fs::{self, File};
+use std::process;
 use std::error::Error;
 use std::path::PathBuf;
 
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use log::LevelFilter;
 
 mod container;
 mod error;
@@ -18,42 +21,40 @@ fn main() {
     let cli_args: ArgMatches = parse_args();
     if let Err(err) = run(cli_args) {
         log::error!("{}", err);
-        std::process::exit(-1);
+        process::exit(-1);
     }
 }
 
 fn parse_args<'a>() -> ArgMatches<'a> {
+    let path_arg = Arg::with_name("PATH")
+        .help("Name of workspace path to interact with.")
+        .takes_value(true)
+        .required(true);
+
     App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .setting(AppSettings::ArgRequiredElseHelp)
-        .arg(
-            Arg::with_name("PATH")
-                .help("Path to workspace with `Confinement` for provisioning container.")
-                .takes_value(true)
-                .required(true),
+        .subcommand(
+            SubCommand::with_name("new")
+                .about("Creates a new workspace with a Confinement policy for configuring.")
+                .arg(&path_arg),
+        )
+        .subcommand(
+            SubCommand::with_name("exec")
+                .about("Starts dynamic analysis on target workspace.")
+                .arg(&path_arg),
+        )
+        .subcommand(
+            SubCommand::with_name("destruct")
+                .about("Nukes a given workspace and")
+                .arg(&path_arg),
         )
         .arg(
-            Arg::with_name("mount")
-                .help("Override mountpoint for use instead of default base image.")
-                .long("mount")
-                .takes_value(true)
-                .value_name("ROOTFS")
-                .required(false),
-        )
-        .arg(
-            Arg::with_name("hostname")
-                .help("Set container hostname instead of randomly generating one.")
-                .long("hostname")
-                .takes_value(true)
-                .value_name("HOSTNAME")
-                .required(false),
-        )
-        .arg(
-            Arg::with_name("trace")
-                .help("Output full trace during execution.")
-                .short("t")
-                .long("trace")
+            Arg::with_name("verbosity")
+                .help("Sets the level of verbosity used.")
+                .short("v")
+                .multiple(true)
                 .takes_value(false)
                 .required(false),
         )
@@ -61,30 +62,62 @@ fn parse_args<'a>() -> ArgMatches<'a> {
 }
 
 fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
-    // set global log level to be `info` if `--trace` is set
-    if matches.is_present("trace") {
-        log::set_max_level(log::LevelFilter::Info);
+    let loglevel = match matches.occurrences_of("verbosity") {
+        1 => LevelFilter::Info,
+        2 => LevelFilter::Debug,
+        3 => LevelFilter::Trace,
+        _ => LevelFilter::Error,
+    };
+    log::set_max_level(loglevel);
+
+    // check the command being run
+    if let Some(args) = matches.subcommand_matches("new") {
+        log::trace!("Checking if workspace already exists");
+        let mut config_path: PathBuf = PathBuf::from(args.value_of("PATH").unwrap());
+        if config_path.exists() {
+            log::error!("Workspace {:?} specified already exists.", config_path);
+            process::exit(-1);
+        }
+
+        log::trace!("Creating the workspace");
+        fs::create_dir(&config_path)?;
+        
+        log::trace!("Creating new default Confinement");
+        config_path.push("Confinement");
+        File::create(&config_path)?;
+
+    } else if let Some(args) = matches.subcommand_matches("exec") {
+        log::trace!("Checking path to Confinement");
+        let mut config_path: PathBuf = PathBuf::from(args.value_of("PATH").unwrap());
+        config_path.push("Confinement");
+        if !config_path.exists() {
+            log::error!(
+                "Path containing Confinement doesn't exist: {:?}.",
+                config_path
+            );
+            process::exit(-1);
+        }
+
+        log::trace!("Parsing Confinement policy");
+        let config: Policy = Policy::new(config_path)?;
+
+        log::info!("Starting new containerized tracer...");
+        let mut tracer: Tracer = Tracer::new(config)?;
+        tracer.run()?;
+
+    } else if let Some(args) = matches.subcommand_matches("destruct") {
+        log::trace!("Checking if workspace doesn't exist");
+        let mut config_path: PathBuf = PathBuf::from(args.value_of("PATH").unwrap());
+        config_path.push("Confinement");
+        if !config_path.exists() {
+            log::error!("Workspace {:?} doesn't exist.", config_path);
+            process::exit(-1);
+        }
+
+        // ASK FOR CONFIRMATION!!
+
+        log::trace!("Deleting the workspace");
+        fs::remove_dir_all(config_path)?;
     }
-
-    log::trace!("Checking path to `Confinement`");
-    let mut config_path: PathBuf = PathBuf::from(matches.value_of("PATH").unwrap());
-    config_path.push("Confinement");
-    if !config_path.exists() {
-        log::error!(
-            "Path containing `Confinement` doesn't exist: {:?}.",
-            config_path
-        );
-    }
-
-    log::trace!("Parsing `Confinement` policy");
-    let config: Policy = Policy::new(config_path)?;
-
-    // other flags
-    let rootfs: Option<&str> = matches.value_of("mount");
-    let hostname: Option<&str> = matches.value_of("hostname");
-
-    log::info!("Starting new containerized tracer...");
-    let mut tracer: Tracer = Tracer::new(config, rootfs, hostname)?;
-    tracer.run()?;
     Ok(())
 }

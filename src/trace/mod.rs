@@ -8,9 +8,9 @@ use std::process::Command;
 
 mod subprocess;
 
-use crate::policy::Policy;
 use crate::container::Container;
 use crate::error::ConfineResult;
+use crate::policy::Policy;
 use crate::trace::subprocess::Subprocess;
 
 /// Interface for tracing a given process and enforcing a given policy mapping.
@@ -25,16 +25,9 @@ pub struct Tracer {
 impl Tracer {
     /// Instantiates a new `Tracer` capable of dynamically tracing a process under a containerized
     /// environment, and enforcing policy rules.
-    pub fn new(
-        policy: Policy,
-        rootfs: Option<&str>,
-        hostname: Option<&str>,
-    ) -> ConfineResult<Self> {
-        let runtime = Container::init(rootfs, &policy, hostname)?;
-        Ok(Self {
-            policy,
-            runtime,
-        })
+    pub fn new(policy: Policy) -> ConfineResult<Self> {
+        let runtime = Container::init(&policy)?;
+        Ok(Self { policy, runtime })
     }
 
     /// Encapsulates container runtime creation and process tracing execution under a callback that
@@ -80,24 +73,24 @@ impl Tracer {
 
     /// Dynamically traces the application specified in the container environment.
     fn trace(&mut self) -> ConfineResult<isize> {
-
         // go to workspace
         std::env::set_current_dir(&self.policy.workspace)?;
 
         // execute setup steps before going into container
-        log::info!("Setting up the environment...");
-        for (idx, step) in self.policy.get_setup().iter().enumerate() {
-            let cmd: Vec<String> = step.command.clone();
-            let mut exec: Command = Command::new(&cmd[0]);
-            for arg in cmd.iter().skip(1) {
-                exec.arg(arg);
-            }
+        if let Some(setup) = self.policy.get_setup() {
+            log::info!("Setting up the environment...");
+            for (idx, step) in setup.iter().enumerate() {
+                let cmd: Vec<String> = step.command.clone();
+                let mut exec: Command = Command::new(&cmd[0]);
+                for arg in cmd.iter().skip(1) {
+                    exec.arg(arg);
+                }
 
-            log::debug!("Running setup step {}", idx + 1);
-            let status = exec.spawn()?.wait()?;
+                log::debug!("Running setup step {}", idx + 1);
+                let status = exec.spawn()?.wait()?;
 
-            // TODO: handle stopping and outputting error
-            if !status.success() {
+                // TODO: handle stopping and outputting error
+                if !status.success() {}
             }
         }
 
@@ -133,7 +126,6 @@ impl Tracer {
                 );
             }
         }
-
         // cleanup container after execution
         log::debug!("Cleaning up after container");
         self.runtime.cleanup()?;
