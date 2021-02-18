@@ -88,9 +88,10 @@ impl Tracer {
 
                 log::debug!("Running setup step {}", idx + 1);
                 let status = exec.spawn()?.wait()?;
-
-                // TODO: handle stopping and outputting error
-                if !status.success() {}
+                if !status.success() {
+                    log::error!("Failed to execute setup step {}", idx + 1);
+                    std::process::exit(-1);
+                }
             }
         }
 

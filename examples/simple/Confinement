@@ -1,10 +1,15 @@
-# Defines basic identifying information
 sample:
     name: Simple Command Execution
-    image: ./rootfs
-    hostname: sample
 
-blacklist:
+    # if set, uses the rootfs directory rather than pulls from upstream
+    #image: ./rootfs
+
+    # if set, will not generate pseudorandom hostname
+    #hostname: sample
+
+
+# Specifies ruleset of operations on specific system calls
+filter:
     logpath: test.log
     rules:
         - syscall: openat
@@ -16,12 +21,19 @@ blacklist:
         - syscall: exit_group
           action: BLOCK
 
+
+# Actual analysis: implements environment to setup
 provision:
+
+    # Anything here will provisioned in the workspace on the host.
+    # This is useful for setting up anything that's necessary to use in the container.
     setup:
       - name: Build smoke screen test
         trace: false
         command: ["gcc", "example.c"]
 
+    # Anything here will execute in the container. Mark commands with `trace: true` to
+    # enable dynamic threat detection capabilities on the specific command.
     execution:
       - name: Check directory
         command: ["/bin/ls"]

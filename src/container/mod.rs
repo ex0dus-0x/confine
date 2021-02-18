@@ -46,7 +46,7 @@ impl Container {
 
         // check if optional hostname specified, otherwise generate random
         let hostname: String = match policy.get_hostname() {
-            Some(hn) => hn.to_string(),
+            Some(hn) => hn,
             None => Container::gen_hostname(),
         };
 

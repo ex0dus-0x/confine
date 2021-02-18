@@ -1,7 +1,8 @@
-use std::fs::{self, File};
-use std::process;
 use std::error::Error;
+use std::fs::{self, File};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::process;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use log::LevelFilter;
@@ -81,11 +82,10 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
 
         log::trace!("Creating the workspace");
         fs::create_dir(&config_path)?;
-        
+
         log::trace!("Creating new default Confinement");
         config_path.push("Confinement");
         File::create(&config_path)?;
-
     } else if let Some(args) = matches.subcommand_matches("exec") {
         log::trace!("Checking path to Confinement");
         let mut config_path: PathBuf = PathBuf::from(args.value_of("PATH").unwrap());
@@ -104,7 +104,6 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
         log::info!("Starting new containerized tracer...");
         let mut tracer: Tracer = Tracer::new(config)?;
         tracer.run()?;
-
     } else if let Some(args) = matches.subcommand_matches("destruct") {
         log::trace!("Checking if workspace doesn't exist");
         let mut config_path: PathBuf = PathBuf::from(args.value_of("PATH").unwrap());
@@ -114,10 +113,21 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
             process::exit(-1);
         }
 
-        // ASK FOR CONFIRMATION!!
+        print!("Are you sure you want to delete this workspace? There's no going back! (y/N) ");
+        io::stdout().flush()?;
 
-        log::trace!("Deleting the workspace");
-        fs::remove_dir_all(config_path)?;
+        let mut input = String::new();
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+        handle.read_to_string(&mut input)?;
+
+        match input.as_str() {
+            "y" | "Y" | "yes" | "Yes" => {
+                log::trace!("Deleting the workspace");
+                fs::remove_dir_all(config_path)?;
+            }
+            _ => {}
+        }
     }
     Ok(())
 }
