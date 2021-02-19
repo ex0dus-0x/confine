@@ -1,3 +1,9 @@
+/*
+ * example.c
+ *
+ *      Smoke test sample that demonstrates a bunch of malware capabilities
+ *      and functionalities to better test `confine`
+ */
 #include <stdio.h>
 #include <unistd.h>
 

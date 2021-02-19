@@ -9,9 +9,8 @@ pub struct ThreatCapabilities {
 
     // Indicators of writing configurations to persist malware after starting back up
     pub persistence: Persistence,
-
-    // Process renaming in order to deceive the system
-    pub deception: bool,
+    // TODO: privilege escalation
+    //pub privsec: PrivEsc,
 }
 
 #[derive(Serialize, Default)]
@@ -27,6 +26,12 @@ pub struct Evasion {
 
     // checks if `ptrace` is attempting inject or intrude on other processes
     pub process_infect: bool,
+
+    // Process renaming in order to deceive the system
+    pub deception: bool,
+
+    // Fileless execution
+    pub fileless_exec: bool,
 }
 
 #[derive(Serialize, Default)]

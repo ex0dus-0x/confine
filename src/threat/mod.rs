@@ -129,8 +129,13 @@ impl ThreatReport {
                 let option_key: String = "int option".to_string();
                 let option: i64 = syscall.args.get(&option_key).unwrap().as_i64().unwrap();
                 if option == 15 {
-                    self.capabilities.deception = true;
+                    self.capabilities.evasion.deception = true;
                 }
+            }
+
+            // detect fileless execution with memfd_create
+            "memfd_create" => {
+                self.capabilities.evasion.fileless_exec = true;
             }
 
             // TODO: networking

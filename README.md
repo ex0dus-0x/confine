@@ -3,6 +3,13 @@
     <p>Containers, but for dynamic malware analysis</p>
 </div>
 
+[![Actions][actions-badge]][actions-url]
+[![crates.io version][crates-confine-badge]][crates-confine]
+[![Docs][docs-badge]][docs.rs]
+
+[actions-badge]: https://github.com/ex0dus-0x/confine/workflows/CI/badge.svg?branch=master
+[actions-url]: https://github.com/ex0dus-0x/confine/actions
+
 __confine__ is a container runtime for dynamically analyzing suspicious executables. Given a sample suspected of being malware, __confine__ will create a container mount,
 dynamically trace it, and report back to you what threat indicators it has been able to find. No more clunky sandboxes and VMs!
 

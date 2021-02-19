@@ -92,7 +92,7 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
         fs::write(&config_path, confinement)?;
 
         println!(
-            "Done! Your new workspace is at {}",
+            "Done! Your new workspace is created. Edit your configuration at `{}`",
             config_path.to_str().unwrap()
         );
     } else if let Some(args) = matches.subcommand_matches("exec") {
@@ -134,7 +134,7 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
             "y" | "Y" | "yes" | "Yes" => {
                 log::trace!("Deleting the workspace");
                 fs::remove_dir_all(config_path)?;
-                println!("Destroyed!");
+                println!("Destroyed the workspace! Bye bye malware!");
             }
             _ => {}
         }
