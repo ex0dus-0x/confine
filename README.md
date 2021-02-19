@@ -4,8 +4,6 @@
 </div>
 
 [![Actions][actions-badge]][actions-url]
-[![crates.io version][crates-confine-badge]][crates-confine]
-[![Docs][docs-badge]][docs.rs]
 
 [actions-badge]: https://github.com/ex0dus-0x/confine/workflows/CI/badge.svg?branch=master
 [actions-url]: https://github.com/ex0dus-0x/confine/actions
