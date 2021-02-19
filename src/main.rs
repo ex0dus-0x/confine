@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::process;
 
@@ -14,7 +14,7 @@ mod syscall;
 mod threat;
 mod trace;
 
-use crate::policy::Policy;
+use crate::policy::{Confinement, Policy};
 use crate::trace::Tracer;
 
 fn main() {
@@ -86,6 +86,15 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
         log::trace!("Creating new default Confinement");
         config_path.push("Confinement");
         File::create(&config_path)?;
+
+        log::trace!("Writing default template to Confinement");
+        let confinement = serde_yaml::to_string(&Confinement::default())?;
+        fs::write(&config_path, confinement)?;
+
+        println!(
+            "Done! Your new workspace is at {}",
+            config_path.to_str().unwrap()
+        );
     } else if let Some(args) = matches.subcommand_matches("exec") {
         log::trace!("Checking path to Confinement");
         let mut config_path: PathBuf = PathBuf::from(args.value_of("PATH").unwrap());
@@ -119,12 +128,13 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
         let mut input = String::new();
         let stdin = io::stdin();
         let mut handle = stdin.lock();
-        handle.read_to_string(&mut input)?;
+        handle.read_line(&mut input)?;
 
         match input.as_str() {
             "y" | "Y" | "yes" | "Yes" => {
                 log::trace!("Deleting the workspace");
                 fs::remove_dir_all(config_path)?;
+                println!("Destroyed!");
             }
             _ => {}
         }

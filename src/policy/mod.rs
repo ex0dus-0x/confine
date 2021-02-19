@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub mod filter;
 
@@ -93,7 +93,7 @@ impl Policy {
 
 /// Defines the root of a Confinement configuration that gets parsed out from a given path that
 /// bootstraps the analysis of an executable sample.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Confinement {
     // metadata about the target sample being analyzed
     pub sample: Sample,
@@ -117,7 +117,7 @@ impl Confinement {
 
 /// Provides a definition into the sample that is to be traced or processed, whether it exists
 /// upstream from some dataset, or if it needs to be build.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Sample {
     // name of target being analyzed
     name: String,
@@ -133,7 +133,7 @@ pub struct Sample {
 }
 
 /// Defines sequential steps executed in the container to properly setup the environment.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Provision {
     // optional setup stage to execute before initializing environment
     pub setup: Option<Vec<Step>>,
@@ -142,7 +142,7 @@ pub struct Provision {
     pub execution: Vec<Step>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Step {
     // optional name identifier for the step
     pub name: String,
