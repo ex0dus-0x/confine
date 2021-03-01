@@ -67,7 +67,7 @@ impl ThreatReport {
 
             // if an file IO syscall is encountered, get filename and mode
             "open" | "openat" | "stat" | "lstat" | "chdir" | "chmod" | "chown" | "lchown"
-            | "fchownat" | "newfstatat" | "fchmodat" | "faccessat" | "mkdnod" | "mknodat" => {
+            | "fchownat" | "newfstatat" | "unlinkat" | "readlinkat" => {
                 // get filename
                 let pathname_key: String = "const char *filename".to_string();
                 let file: &str = syscall.args.get(&pathname_key).unwrap().as_str().unwrap();
@@ -85,7 +85,27 @@ impl ThreatReport {
                 self.file_io.insert(file.to_string(), format!("{}", flag));
             }
 
+            "faccessat" | "fchmodat" | "access" | "mknod" | "mknodat" | "mkdirat" => {
+                let pathname_key: String = "const char *filename".to_string();
+                let file: &str = syscall.args.get(&pathname_key).unwrap().as_str().unwrap();
+
+                let mode_key: String = "int mode".to_string();
+                let mode: u64 = match syscall.args.get(&mode_key) {
+                    Some(val) => val.as_u64().unwrap(),
+                    None => {
+                        let alt_key: String = "umode_t mode".to_string();
+                        match syscall.args.get(&alt_key) {
+                            Some(val) => val.as_u64().unwrap(),
+                            None => 0,
+                        }
+                    }
+                };
+
+                self.file_io.insert(file.to_string(), format!("{}", mode));
+            }
+
             // TODO: fstat
+            // TODO: renameat, linkat, symlinkat special cases
 
             // if a child command is launched, record executable and arguments
             "execve" | "execveat" | "execlp" | "execvp" => {
@@ -138,7 +158,7 @@ impl ThreatReport {
                 self.capabilities.evasion.fileless_exec = true;
             }
 
-            // TODO: networking
+            // networking
             _ => {}
         }
         Ok(())
