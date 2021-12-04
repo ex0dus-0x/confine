@@ -1,0 +1,24 @@
+[package]
+name = "confine_probes"
+version = "0.1.0"
+edition = '2018'
+
+[dependencies]
+cty = "0.2"
+redbpf-macros = "1.3"
+redbpf-probes = "1.3"
+
+[build-dependencies]
+cargo-bpf = { version = "1.3", default-features = false }
+
+[features]
+default = []
+probes = []
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "tracer"
+path = "src/tracer/main.rs"
+required-features = ["probes"]
