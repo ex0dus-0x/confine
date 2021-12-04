@@ -7,6 +7,16 @@ use std::process;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use log::LevelFilter;
 
+use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
+use redbpf::load::Loader;
+use futures::stream::StreamExt;
+
+use std::{ffi::CStr, ptr};
+
+// TODO:
+//use confine_probes::tracer::OpenPath;
+
 mod container;
 mod error;
 mod policy;
@@ -17,6 +27,47 @@ mod trace;
 use crate::policy::{Confinement, Policy};
 use crate::trace::Tracer;
 
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct OpenPath {
+    pub filename: [u8; 256],
+}
+
+fn probe_code() -> &'static [u8] {
+    include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/target/bpf/programs/tracer/tracer.elf"
+    ))
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::WARN)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+
+    let mut loaded = Loader::load(probe_code()).expect("error on Loader::load");
+    for kp in loaded.kprobes_mut() {
+        kp.attach_kprobe(&kp.name(), 0)
+            .expect(&format!("error attaching kprobe program {}", kp.name()));
+    }
+
+    while let Some((map_name, events)) = loaded.events.next().await {
+        if map_name == "OPEN_PATHS" {
+            for event in events {
+                let open_path = unsafe { ptr::read(event.as_ptr() as *const OpenPath) };
+                unsafe {
+                    let cfilename = CStr::from_ptr(open_path.filename.as_ptr() as *const _);
+                    println!("{}", cfilename.to_string_lossy());
+                };
+            }
+        }
+    }
+
+}
+
+/*
 fn main() {
     env_logger::init();
     let cli_args: ArgMatches = parse_args();
@@ -48,7 +99,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         )
         .subcommand(
             SubCommand::with_name("destruct")
-                .about("Nukes a given workspace and")
+                .about("Nukes a given workspace.")
                 .arg(&path_arg),
         )
         .arg(
@@ -141,3 +192,4 @@ fn run(matches: ArgMatches) -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
+*/

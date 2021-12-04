@@ -17,6 +17,14 @@ opt-level = 'z'
 lto = true
 
 [dependencies]
+redbpf = { version = "*", features = ["load"] }
+tokio = { version = "1.0", features = ["rt", "signal", "time", "io-util", "net", "sync", "macros"] }
+tracing-subscriber = "0.2"
+tracing = "0.1"
+futures = "0.3"
+
+confine_probes = { path = "./confine-probes" }
+
 clap = "2.33.0"
 names = { version = "0.11.0", default-features = false }
 
@@ -37,3 +45,5 @@ walkdir = "2"
 serde = { version = "1.0.97", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.8"
+
+
